@@ -45,7 +45,8 @@ export default function PopularServices({ services, isLoading }) {
         id: s.service_id || String(s.id || idx),
         name: s.name,
         price: getServicePrice(s.name),
-        icon: getServiceIcon(s.name)
+        icon: getServiceIcon(s.name),
+        service_icon: s.service_icon
       }))
     : [
         { id: 'cleaning', name: tr('service.cleaning', 'Home Cleaning'), price: tr('price.from20', 'From €20/hr'), icon: Home },
@@ -84,8 +85,16 @@ export default function PopularServices({ services, isLoading }) {
                   onClick={() => handleServiceClick(service.name)}
                   className="group flex flex-col items-center justify-center p-6 sm:p-8 bg-white rounded-2xl border border-slate-100 shadow-[0_4px_20px_rgba(9,32,64,0.02)] hover:shadow-premium hover:-translate-y-0.5 transition-all duration-300 cursor-pointer"
                 >
-                  {/* Blue Icon */}
-                  <IconComponent className="w-8 h-8 text-[#137DC5] stroke-[1.8] mb-4 group-hover:scale-105 transition-transform duration-300" />
+                  {/* Blue Icon / Image */}
+                  {service.service_icon ? (
+                    <img 
+                      src={service.service_icon} 
+                      alt={service.name} 
+                      className="w-8 h-8 object-contain mb-4 group-hover:scale-105 transition-transform duration-300" 
+                    />
+                  ) : (
+                    <IconComponent className="w-8 h-8 text-[#137DC5] stroke-[1.8] mb-4 group-hover:scale-105 transition-transform duration-300" />
+                  )}
 
                   {/* Service Details */}
                   <h3 className="font-sans font-bold text-slate-800 text-sm sm:text-[14.5px] text-center mb-1">

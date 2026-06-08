@@ -290,7 +290,10 @@ function PostJobContent() {
     const fetchServices = async () => {
       try {
         setServicesLoading(true);
-        const res = await authApi.getServicesDropdown();
+        const isLoggedIn = typeof window !== 'undefined' && sessionStorage.getItem('is_logged_in') === 'true';
+        const res = isLoggedIn 
+          ? await authApi.getServicesDropdown() 
+          : await authApi.getServicesWebList();
         if (res && res.data) {
           setServicesList(res.data);
           // Pre-select based on URL param only (no default first service select)
@@ -499,6 +502,13 @@ function PostJobContent() {
       params.set('monthly_slots', JSON.stringify(monthlySlots));
     } else {
       params.set('booking_time', selectedTime);
+    }
+
+    const isLoggedInVal = typeof window !== 'undefined' && sessionStorage.getItem('is_logged_in') === 'true';
+    if (!isLoggedInVal) {
+      sessionStorage.setItem('redirect_after_login', `/workers?${params.toString()}`);
+      router.push('/login');
+      return;
     }
 
     router.push(`/workers?${params.toString()}`);

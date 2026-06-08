@@ -118,8 +118,18 @@ export const authApi = {
       method: 'GET'
     }),
 
+  getHomeWebData: () =>
+    request('/api/home_web', {
+      method: 'GET'
+    }),
+
   getServicesDropdown: () =>
     request('/api/services/dropdown', {
+      method: 'GET'
+    }),
+
+  getServicesWebList: () =>
+    request('/api/service/list_web', {
       method: 'GET'
     }),
 

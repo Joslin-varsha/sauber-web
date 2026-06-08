@@ -43,7 +43,10 @@ export default function BookingWidget({ locations }) {
   useEffect(() => {
     async function loadServices() {
       try {
-        const res = await authApi.getServicesDropdown();
+        const isLoggedIn = typeof window !== 'undefined' && sessionStorage.getItem('is_logged_in') === 'true';
+        const res = isLoggedIn 
+          ? await authApi.getServicesDropdown() 
+          : await authApi.getServicesWebList();
         if (res && res.data && res.data.length > 0) {
           const mapped = res.data.map(svc => ({
             id: svc.id,

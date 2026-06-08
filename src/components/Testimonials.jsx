@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { Star, ShieldCheck, Lock, Award, Headphones } from 'lucide-react';
 import { useLanguage } from '@/utils/LanguageContext';
 
-export default function Testimonials() {
+export default function Testimonials({ reviews: apiReviews }) {
   const [activeSlide, setActiveSlide] = useState(0);
   const { tr } = useLanguage();
 
-  const reviews = [
+  const defaultReviews = [
     {
       id: 1,
       name: 'Anna L.',
@@ -37,6 +37,18 @@ export default function Testimonials() {
       stars: 5,
     },
   ];
+
+  const reviews = apiReviews && apiReviews.length > 0
+    ? apiReviews.map((r, idx) => ({
+        id: r.id || idx,
+        name: r.user_name || 'Customer',
+        city: r.worker_name ? `${tr('review.reviewed', 'Reviewed')} ${r.worker_name}` : tr('review.verifiedCustomer', 'Verified Customer'),
+        avatarInitials: (r.user_name || 'C').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase(),
+        avatarBg: 'bg-indigo-100 text-indigo-700',
+        text: r.feedback ? `"${r.feedback}"` : tr('review.noFeedback', '"Great service!"'),
+        stars: r.rating || 5,
+      }))
+    : defaultReviews;
 
   const highlights = [
     {

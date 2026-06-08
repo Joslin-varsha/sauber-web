@@ -455,7 +455,10 @@ function WorkersContent() {
 
     async function loadServices() {
       try {
-        const res = await authApi.getServicesDropdown();
+        const loggedIn = typeof window !== 'undefined' && sessionStorage.getItem('is_logged_in') === 'true';
+        const res = loggedIn 
+          ? await authApi.getServicesDropdown() 
+          : await authApi.getServicesWebList();
         if (res && res.data) {
           setServicesList(res.data);
         }

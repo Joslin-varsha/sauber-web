@@ -8,7 +8,7 @@ import { X, Lock, ShieldCheck, CreditCard, ShoppingBag, User, Calendar, Clock, L
 
 // Initialize Stripe outside of component render to avoid recreation
 const getStripeKey = () => {
-  return process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_51OwWn0SFLbC5C7wT3fLwL4Z7w6Lg7V8J2z7K8F9Y9G6E6D5D4C3B2A1';
+  return process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY 
 };
 const stripePromise = loadStripe(getStripeKey());
 

@@ -253,8 +253,23 @@ export default function DashboardOrdersPage() {
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = sessionStorage.getItem('is_logged_in') === 'true';
+      if (!isLoggedIn) {
+        sessionStorage.setItem('redirect_after_login', '/dashboard/orders');
+        router.push('/login');
+        return;
+      }
+      setIsAuthorized(true);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (!isAuthorized) return;
+
     const fetchOrders = async () => {
       try {
         setIsLoading(true);
@@ -275,7 +290,18 @@ export default function DashboardOrdersPage() {
     };
 
     fetchOrders();
-  }, []);
+  }, [isAuthorized]);
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#FAFCFF] font-sans">
+        <div className="text-center flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-[#137DC5] border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-slate-500 font-bold text-sm">Verifying session...</span>
+        </div>
+      </div>
+    );
+  }
 
   // Dynamically calculate badge counts
   const allCount = orders.length;

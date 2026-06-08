@@ -107,9 +107,24 @@ export default function WriteReviewPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [error, setError] = useState('');
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = sessionStorage.getItem('is_logged_in') === 'true';
+      if (!isLoggedIn) {
+        sessionStorage.setItem('redirect_after_login', `/orders/${rawId}/review`);
+        router.push('/login');
+        return;
+      }
+      setIsAuthorized(true);
+    }
+  }, [rawId, router]);
 
   // Load Order Details dynamically
   useEffect(() => {
+    if (!isAuthorized) return;
+
     const loadOrderDetails = async () => {
       try {
         setIsOrderLoading(true);
@@ -167,7 +182,18 @@ export default function WriteReviewPage() {
       setError('No Order ID provided');
       setIsOrderLoading(false);
     }
-  }, [rawId]);
+  }, [rawId, isAuthorized]);
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#FAFCFF] font-sans">
+        <div className="text-center flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-[#137DC5] border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-slate-500 font-bold text-sm">Verifying session...</span>
+        </div>
+      </div>
+    );
+  }
 
   // Text representation for rating score
   const getRatingLabel = (score) => {

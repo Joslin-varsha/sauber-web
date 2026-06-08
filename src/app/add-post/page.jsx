@@ -23,6 +23,7 @@ import {
   Sparkles,
   Ruler
 } from 'lucide-react';
+import Header from '@/components/Header';
 import DashboardHeader from '@/components/DashboardHeader';
 import DashboardSidebar from '@/components/DashboardSidebar';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
@@ -248,6 +249,13 @@ function PostJobContent() {
   const [notes, setNotes] = useState(searchParams.get('notes') || '');
   const [referredBy, setReferredBy] = useState('');
   const [isOpenReferredBy, setIsOpenReferredBy] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsLoggedIn(sessionStorage.getItem('is_logged_in') === 'true');
+    }
+  }, []);
 
   // Dropdown UI state toggles
   const [isOpenRooms, setIsOpenRooms] = useState(false);
@@ -398,7 +406,22 @@ function PostJobContent() {
       .filter(m => selectedMaterials.includes(m.id))
       .reduce((sum, m) => sum + parseFloat(m.amount || 0), 0);
 
-    return Math.round(baseCost + materialsCost);
+    const baseAmount = baseCost + materialsCost;
+
+    let multiplier = 1;
+    if (frequency === 'Daily') {
+      multiplier = 7;
+    } else if (frequency === 'Weekly') {
+      if (isBiweekly) {
+        multiplier = 2;
+      } else {
+        multiplier = weeklySlots ? weeklySlots.length : 1;
+      }
+    } else if (frequency === 'Monthly') {
+      multiplier = monthlySlots ? monthlySlots.length : 1;
+    }
+
+    return Math.round(baseAmount * multiplier);
   };
 
   const handleBack = () => {
@@ -520,18 +543,18 @@ function PostJobContent() {
 
       {/* Desktop view */}
       <div className="hidden md:flex flex-col flex-grow">
-        {/* 1. Header (Shared logged in shell) */}
-        <DashboardHeader />
+        {/* 1. Header (Shared logged in shell / Public header) */}
+        {isLoggedIn ? <DashboardHeader /> : <Header />}
 
       {/* 2. Main content page container */}
       <main className="flex-grow mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
         <div className="flex flex-col lg:flex-row gap-6 items-start">
 
           {/* Left Sidebar navigation */}
-          <DashboardSidebar />
+          {isLoggedIn && <DashboardSidebar />}
 
           {/* Right Main Content */}
-          <div className="flex-grow w-full lg:w-3/4 flex flex-col gap-6">
+          <div className={`flex-grow w-full ${isLoggedIn ? 'lg:w-3/4' : 'max-w-4xl mx-auto'} flex flex-col gap-6`}>
 
             {/* Title Line (Back arrow + Title + Help Button) */}
             <div className="flex items-center justify-between">

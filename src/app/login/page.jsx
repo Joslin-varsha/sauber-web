@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -18,6 +18,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = sessionStorage.getItem('is_logged_in') === 'true';
+      if (isLoggedIn) {
+        router.replace('/profile');
+      }
+    }
+  }, [router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

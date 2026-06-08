@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Check,
@@ -19,18 +19,41 @@ import DashboardFooter from '@/components/DashboardFooter';
 function SuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [transactionId] = useState(() => searchParams.get('payment_id') || searchParams.get('payment_intent') || 'PAY-2024-12568');
+  const [bookingId] = useState(() => searchParams.get('booking_id') || '#JOB-2024-1256');
+  const [dateTimeStr] = useState(() => searchParams.get('datetime') || '24 May 2024, 10:00 AM');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = sessionStorage.getItem('is_logged_in') === 'true';
+      if (!isLoggedIn) {
+        sessionStorage.setItem('redirect_after_login', '/payment/success');
+        router.push('/login');
+        return;
+      }
+      setIsAuthorized(true);
+    }
+  }, [router]);
 
   // Search parameters passed from workers booking panel (with mockup defaults)
   const service = searchParams.get('service') || 'Apartment Deep Cleaning';
   const amount = searchParams.get('amount') || '549';
   const workerName = searchParams.get('worker') || 'your provider';
 
-  const [transactionId] = useState(() => searchParams.get('payment_id') || searchParams.get('payment_intent') || 'PAY-2024-12568');
-  const [bookingId] = useState(() => searchParams.get('booking_id') || '#JOB-2024-1256');
-  const [dateTimeStr] = useState(() => searchParams.get('datetime') || '24 May 2024, 10:00 AM');
-
   const parsedAmount = parseFloat(amount);
   const displayAmount = isNaN(parsedAmount) ? amount : (parsedAmount % 1 === 0 ? parsedAmount.toFixed(0) : parsedAmount.toFixed(2));
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#FAFCFF] font-sans">
+        <div className="text-center flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-[#137DC5] border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-slate-500 font-bold text-sm">Verifying session...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-[#FAFBFD] text-slate-800">

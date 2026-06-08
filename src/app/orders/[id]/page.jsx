@@ -516,6 +516,7 @@ export default function OrderDetailsPage() {
   const [order, setOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [currentStatus, setCurrentStatus] = useState('Pending');
@@ -559,13 +560,26 @@ export default function OrderDetailsPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = sessionStorage.getItem('is_logged_in') === 'true';
+      if (!isLoggedIn) {
+        sessionStorage.setItem('redirect_after_login', `/orders/${rawId}`);
+        router.push('/login');
+        return;
+      }
+      setIsAuthorized(true);
+    }
+  }, [rawId, router]);
+
+  useEffect(() => {
+    if (!isAuthorized) return;
     if (rawId) {
       fetchOrderDetails();
     } else {
       setError('No Order ID provided');
       setIsLoading(false);
     }
-  }, [rawId]);
+  }, [rawId, isAuthorized]);
 
   useEffect(() => {
     if (order) {
@@ -588,6 +602,17 @@ export default function OrderDetailsPage() {
       }
     }
   }, [order]);
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#FAFCFF] font-sans">
+        <div className="text-center flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-[#137DC5] border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-slate-500 font-bold text-sm">Verifying session...</span>
+        </div>
+      </div>
+    );
+  }
 
   // State helpers
   const isPending = currentStatus === 'Pending';

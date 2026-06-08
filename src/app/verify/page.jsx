@@ -26,6 +26,15 @@ export default function VerifyPage() {
     }
     return '';
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isLoggedIn = sessionStorage.getItem('is_logged_in') === 'true';
+      if (isLoggedIn) {
+        router.replace('/profile');
+      }
+    }
+  }, [router]);
   
   // OTP input digits (6 boxes)
   const [otp, setOtp] = useState(['', '', '', '', '', '']);

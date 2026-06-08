@@ -423,10 +423,12 @@ function WorkersContent() {
   };
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [stripeClientSecret, setStripeClientSecret] = useState(null);
   const [stripePaymentIntentId, setStripePaymentIntentId] = useState(null);
   const [showStripeModal, setShowStripeModal] = useState(false);
   const [paymentBookingData, setPaymentBookingData] = useState(null);
+  const [isBookingLoading, setIsBookingLoading] = useState(false);
 
   // Fetch workers from the backend API
   const fetchWorkers = async () => {
@@ -449,16 +451,25 @@ function WorkersContent() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setIsLoggedIn(sessionStorage.getItem('is_logged_in') === 'true');
+      const loggedIn = sessionStorage.getItem('is_logged_in') === 'true';
+      if (!loggedIn) {
+        const currentPath = window.location.pathname + window.location.search;
+        sessionStorage.setItem('redirect_after_login', currentPath);
+        router.push('/login');
+        return;
+      }
+      setIsLoggedIn(true);
+      setIsAuthorized(true);
     }
+  }, [router]);
+
+  useEffect(() => {
+    if (!isAuthorized) return;
     fetchWorkers();
 
     async function loadServices() {
       try {
-        const loggedIn = typeof window !== 'undefined' && sessionStorage.getItem('is_logged_in') === 'true';
-        const res = loggedIn 
-          ? await authApi.getServicesDropdown() 
-          : await authApi.getServicesWebList();
+        const res = await authApi.getServicesDropdown();
         if (res && res.data) {
           setServicesList(res.data);
         }
@@ -479,7 +490,7 @@ function WorkersContent() {
       }
     }
     loadPricingSettings();
-  }, []);
+  }, [isAuthorized]);
 
   // Listen for location changes from map picker or header
   useEffect(() => {
@@ -580,28 +591,22 @@ function WorkersContent() {
     }
   }, [paramService, servicesList]);
 
+  if (!isAuthorized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#FAFCFF] font-sans">
+        <div className="text-center flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-[#137DC5] border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-slate-500 font-bold text-sm">Verifying session...</span>
+        </div>
+      </div>
+    );
+  }
+
   const selectedServiceObj = servicesList.find(s => 
     s.name.toLowerCase().trim() === (paramService || '').toLowerCase().trim()
   );
-  const serviceBasePrice = selectedServiceObj ? parseFloat(selectedServiceObj.base_price) : 1200.00;
-  const roomsCount = parseInt(paramRooms, 10) || 1;
-  const baseTotal = serviceBasePrice * roomsCount;
-  
-  const initialMaterialsCost = (() => {
-    try {
-      const initialIds = paramMaterialAmountIds ? JSON.parse(paramMaterialAmountIds) : [];
-      return initialIds.reduce((total, matId) => {
-        const mat = dynamicMaterials.find(m => m.id === matId);
-        return total + (mat ? parseFloat(mat.amount || 0) : 0);
-      }, 0);
-    } catch (e) {
-      return 0;
-    }
-  })();
-
-  const paramEstimatedCost = searchParams.get('estimated_cost');
-  const baseEstimatedCost = paramEstimatedCost ? parseFloat(paramEstimatedCost) : baseTotal;
-  const baseCostWithoutMaterials = Math.max(0, baseEstimatedCost - initialMaterialsCost);
+  const hourlyPrice = selectedServiceObj ? parseFloat(selectedServiceObj.base_price) : (pricingSettings ? parseFloat(pricingSettings.base_price) : 100);
+  const singleOccurrenceBaseCost = hourlyPrice * (parseFloat(paramExpectedTime) || 1);
 
   const vacuumCleanerVal = pricingSettings ? parseFloat(pricingSettings.vacuum_cleaner_amount) : 250.00;
   const vacuumExtra = vacuumRequired ? vacuumCleanerVal : 0.00;
@@ -611,7 +616,21 @@ function WorkersContent() {
     return total + (mat ? parseFloat(mat.amount || 0) : 0);
   }, 0);
 
-  const estimatedPrice = baseCostWithoutMaterials + currentMaterialsCost + vacuumExtra;
+  // Multiplier logic matching add-post
+  let multiplier = 1;
+  if (scheduleType === 'Daily') {
+    multiplier = 7;
+  } else if (scheduleType === 'Weekly') {
+    if (isBiweekly) {
+      multiplier = 2;
+    } else {
+      multiplier = weeklySlots ? weeklySlots.length : 1;
+    }
+  } else if (scheduleType === 'Monthly') {
+    multiplier = monthlySlots ? monthlySlots.length : 1;
+  }
+
+  const estimatedPrice = (singleOccurrenceBaseCost + currentMaterialsCost + vacuumExtra) * multiplier;
 
   const filteredWorkers = workers.filter(worker => {
     const matchesRating = worker.rating >= parseFloat(minRating);
@@ -641,8 +660,6 @@ function WorkersContent() {
     setTempSearchRadius(15);
     setTempMinRating('0.0');
   };
-
-  const [isBookingLoading, setIsBookingLoading] = useState(false);
 
   const executeBooking = async (activeWorker) => {
     if (!activeWorker) return;
@@ -696,13 +713,13 @@ function WorkersContent() {
 
       const payload = {
         service_id: actualServiceId,
-        service_type: paramService || "Home Cleaning",
+        service_type: paramService || "",
         service_address: filterLocation,
         worker_id: workerIdVal,
         booking_date: formatBookingDateForAPI(bookingDate),
-        booking_time: bookingTime || "12:00 PM",
-        rooms: parseInt(paramRooms, 10) || 2,
-        area_sqm: paramSqm || "120",
+        booking_time: bookingTime || "",
+        rooms: parseInt(paramRooms, 10) || 0,
+        area_sqm: paramSqm || "",
         material_amount_ids: selectedMaterials,
         vacuum_cleaner: vacuumRequired,
         frequency: scheduleType,
@@ -710,14 +727,25 @@ function WorkersContent() {
         note: notes || "",
         expected_time: paramExpectedTime ? `${paramExpectedTime} Hours` : "2 Hours",
         latitude: selectedLatitude,
-        longitude: selectedLongitude
+        longitude: selectedLongitude,
+        grand_total: estimatedPrice,
+        total_payable: estimatedPrice,
+        estimated_cost: estimatedPrice,
+        price: estimatedPrice,
+        amount: estimatedPrice,
+        total: estimatedPrice,
+        is_biweekly: isBiweekly,
+        biweekly_days: biweeklyDays,
+        biweekly_times: biweeklyTimes,
+        weekly_slots: weeklySlots,
+        monthly_slots: monthlySlots
       };
 
       const response = await authApi.createOrder(payload);
       
       if (response.status && response.data) {
         const orderData = response.data;
-        const totalAmount = orderData.pricing ? orderData.pricing.total_payable : estimatedPrice;
+        const totalAmount = estimatedPrice;
         
         const clientSecretVal = response.clientSecret || orderData.clientSecret;
         const paymentIntentIdVal = response.paymentIntentId || orderData.paymentIntentId;

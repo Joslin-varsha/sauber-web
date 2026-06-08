@@ -373,7 +373,7 @@ function WorkersContent() {
     if (raw) {
       try { return JSON.parse(raw); } catch (e) {}
     }
-    return [{ date: '24 May 2024', time: '12:00 PM' }];
+    return [{ date: '', time: '12:00 PM' }];
   });
 
   // Custom dropdown states for dynamically generated rows
@@ -664,6 +664,46 @@ function WorkersContent() {
   const executeBooking = async (activeWorker) => {
     if (!activeWorker) return;
     
+    // Validate weekly slots
+    if (scheduleType === 'Weekly' && !isBiweekly) {
+      if (!weeklySlots || weeklySlots.length === 0) {
+        alert('Please add at least one weekly slot.');
+        return;
+      }
+      for (let i = 0; i < weeklySlots.length; i++) {
+        if (!weeklySlots[i].day || !weeklySlots[i].time) {
+          alert('Please select both day and time for all weekly slots.');
+          return;
+        }
+      }
+      const days = weeklySlots.map(s => s.day).filter(Boolean);
+      const uniqueDays = new Set(days);
+      if (uniqueDays.size !== days.length) {
+        alert('Please select different days for your weekly schedule.');
+        return;
+      }
+    }
+    
+    // Validate monthly slots
+    if (scheduleType === 'Monthly') {
+      if (!monthlySlots || monthlySlots.length === 0) {
+        alert('Please add at least one monthly date slot.');
+        return;
+      }
+      for (let i = 0; i < monthlySlots.length; i++) {
+        if (!monthlySlots[i].date || !monthlySlots[i].time) {
+          alert('Please select both date and time for all monthly slots.');
+          return;
+        }
+      }
+      const dates = monthlySlots.map(s => s.date).filter(Boolean);
+      const uniqueDates = new Set(dates);
+      if (uniqueDates.size !== dates.length) {
+        alert('Please select different dates for your monthly schedule.');
+        return;
+      }
+    }
+
     setIsBookingLoading(true);
     try {
       // 1. Format frequency details according to schedule type
@@ -2457,7 +2497,7 @@ function WorkersContent() {
                             <button
                               type="button"
                               onClick={() => {
-                                setWeeklySlots([...weeklySlots, { day: 'Monday', time: '12:00 PM' }]);
+                                 setWeeklySlots([...weeklySlots, { day: '', time: '12:00 PM' }]);
                               }}
                               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/70 hover:bg-blue-50 text-[#137DC5] rounded-xl font-sans font-bold text-[12px] transition-all cursor-pointer border border-blue-100/30"
                             >
@@ -2474,7 +2514,7 @@ function WorkersContent() {
                                 <div className="flex flex-col gap-1.5 relative text-left">
                                   <span className="font-sans font-bold text-slate-400 text-[10.5px] uppercase tracking-wider">Select Day</span>
                                   <select
-                                    value={slot.day}
+                                    value={slot.day || ''}
                                     onChange={(e) => {
                                       const updated = [...weeklySlots];
                                       updated[index].day = e.target.value;
@@ -2482,6 +2522,7 @@ function WorkersContent() {
                                     }}
                                     className="w-full px-4 py-3 bg-[#FAFBFD] border border-slate-200/80 hover:border-slate-300 rounded-xl text-slate-700 font-sans font-bold text-[13px] transition-all cursor-pointer focus:outline-none focus:border-[#137DC5] focus:ring-2 focus:ring-[#137DC5]/20"
                                   >
+                                    <option value="" disabled>Day</option>
                                     {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
                                       <option key={day} value={day}>{day}</option>
                                     ))}
@@ -2588,7 +2629,7 @@ function WorkersContent() {
                           <button
                             type="button"
                             onClick={() => {
-                              setMonthlySlots([...monthlySlots, { date: '24 May 2024', time: '12:00 PM' }]);
+                              setMonthlySlots([...monthlySlots, { date: '', time: '12:00 PM' }]);
                             }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/70 hover:bg-blue-50 text-[#137DC5] rounded-xl font-sans font-bold text-[12px] transition-all cursor-pointer border border-blue-100/30"
                           >
@@ -2602,16 +2643,20 @@ function WorkersContent() {
                             <div key={index} className="grid grid-cols-1 gap-3 bg-slate-50/30 p-3 rounded-xl border border-slate-100 relative text-left">
                               <div className="flex flex-col gap-1.5 relative text-left">
                                 <span className="font-sans font-bold text-slate-400 text-[10.5px] uppercase tracking-wider">Select Date</span>
-                                <input
-                                  type="date"
-                                  value={convertToYYYYMMDD(slot.date)}
+                                <select
+                                  value={slot.date || ''}
                                   onChange={(e) => {
                                     const updated = [...monthlySlots];
-                                    updated[index].date = convertToDDMMMYYYY(e.target.value);
+                                    updated[index].date = e.target.value.toString();
                                     setMonthlySlots(updated);
                                   }}
                                   className="w-full px-4 py-3 bg-[#FAFBFD] border border-slate-200/80 hover:border-slate-300 rounded-xl text-slate-700 font-sans font-bold text-[13px] transition-all cursor-pointer focus:outline-none focus:border-[#137DC5] focus:ring-2 focus:ring-[#137DC5]/20"
-                                />
+                                >
+                                  <option value="" disabled>Day</option>
+                                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                                    <option key={d} value={d}>{d}</option>
+                                  ))}
+                                </select>
                               </div>
 
                               <div className="flex flex-col gap-1.5 relative text-left">

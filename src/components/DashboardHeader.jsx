@@ -124,9 +124,7 @@ export default function DashboardHeader() {
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#137DC5] transition-colors" />
               </button>
             </div> */}
-            <Link href="/#become-worker" className="font-sans font-bold text-slate-600 hover:text-[#137DC5] transition-colors text-[13px]">
-              {t('nav.becomeWorker', 'Become a Worker')}
-            </Link>
+
             <div className="relative py-1 flex items-center">
               <Link 
                 href="/about-us" 
@@ -318,13 +316,7 @@ export default function DashboardHeader() {
             >
               {t('nav.services', 'Services')}
             </Link>
-            <Link 
-              href="/#become-worker" 
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="font-sans font-bold text-slate-600 hover:text-[#137DC5] p-2 text-xs rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              {t('nav.becomeWorker', 'Become a Worker')}
-            </Link>
+
             <Link 
               href="/about-us" 
               onClick={() => setIsMobileMenuOpen(false)}

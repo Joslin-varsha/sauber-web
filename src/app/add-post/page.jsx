@@ -85,6 +85,19 @@ const convertToDDMMMYYYY = (dateStr) => {
   return `${day} ${month} ${year}`;
 };
 
+const isScheduleError = (err) => {
+  if (!err) return false;
+  const lowercase = err.toLowerCase();
+  return lowercase.includes('date') || 
+         lowercase.includes('time') || 
+         lowercase.includes('day') || 
+         lowercase.includes('schedule') || 
+         lowercase.includes('slot') || 
+         lowercase.includes('biweekly') || 
+         lowercase.includes('weekly') || 
+         lowercase.includes('monthly');
+};
+
 function PostJobContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -137,7 +150,7 @@ function PostJobContent() {
     if (raw) {
       try { return JSON.parse(raw); } catch (e) {}
     }
-    return [{ date: '24 May 2024', time: '12:00 PM' }];
+    return [{ date: '', time: '12:00 PM' }];
   });
 
   // Custom dropdown states for dynamically generated rows
@@ -531,6 +544,12 @@ function PostJobContent() {
             return;
           }
         }
+        const days = weeklySlots.map(s => s.day).filter(Boolean);
+        const uniqueDays = new Set(days);
+        if (uniqueDays.size !== days.length) {
+          setValidationError('Please select different days for your weekly schedule.');
+          return;
+        }
       }
     } else if (frequency === 'Monthly') {
       if (!monthlySlots || monthlySlots.length === 0) {
@@ -542,6 +561,12 @@ function PostJobContent() {
           setValidationError('Please select both date and time for all monthly slots.');
           return;
         }
+      }
+      const dates = monthlySlots.map(s => s.date).filter(Boolean);
+      const uniqueDates = new Set(dates);
+      if (uniqueDates.size !== dates.length) {
+        setValidationError('Please select different dates for your monthly schedule.');
+        return;
       }
     }
 
@@ -752,7 +777,7 @@ function PostJobContent() {
                           ))}
                         </div>
                       )}
-                      {validationError && (
+                      {validationError && !isScheduleError(validationError) && (
                         <p className="mt-2 text-xs font-semibold text-red-500 text-left">
                           ⚠ {validationError}
                         </p>
@@ -789,10 +814,9 @@ function PostJobContent() {
                               setRooms(val ? parseInt(val) : '');
                             }}
                             onFocus={() => setActiveField('rooms')}
-                            className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-right pr-1"
+                            className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-center"
                             placeholder="0"
                           />
-                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none ml-1.5">Rooms</span>
                         </div>
                       </div>
                     </div>
@@ -814,10 +838,9 @@ function PostJobContent() {
                               setSqm(val ? parseInt(val) : '');
                             }}
                             onFocus={() => setActiveField('sqm')}
-                            className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-right pr-1.5"
+                            className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-center"
                             placeholder="0"
                           />
-                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none ml-1.5">sqm</span>
                         </div>
                       </div>
                     </div>
@@ -826,7 +849,7 @@ function PostJobContent() {
                     <div className="flex items-center justify-between px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <Clock className="w-4.5 h-4.5 text-[#137DC5]" />
-                        <span className="font-sans font-semibold text-slate-600 text-[13px]">Expected Time</span>
+                        <span className="font-sans font-semibold text-slate-600 text-[13px]">Expected Time (Hrs)</span>
                       </div>
                       <div className="relative">
                         <div className={`flex items-center px-3.5 py-1.5 bg-[#FAFBFD] border rounded-xl transition-all w-28 ${activeField === 'time' ? 'border-[#137DC5] bg-blue-50/20 shadow-[0_0_0_3px_rgba(19,125,197,0.1)]' : 'border-slate-200 hover:border-slate-300'}`}>
@@ -839,10 +862,9 @@ function PostJobContent() {
                               setExpectedTime(val ? parseInt(val) : '');
                             }}
                             onFocus={() => setActiveField('time')}
-                            className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-right pr-1"
+                            className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-center"
                             placeholder="0"
                           />
-                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none ml-1.5">Hrs</span>
                         </div>
                       </div>
                     </div>
@@ -1073,7 +1095,7 @@ function PostJobContent() {
                           <button
                             type="button"
                             onClick={() => {
-                              setWeeklySlots([...weeklySlots, { day: 'Monday', time: '12:00 PM' }]);
+                              setWeeklySlots([...weeklySlots, { day: '', time: '12:00 PM' }]);
                             }}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/70 hover:bg-blue-50 text-[#137DC5] rounded-xl font-sans font-bold text-[12px] transition-all cursor-pointer border border-blue-100/30"
                           >
@@ -1095,7 +1117,7 @@ function PostJobContent() {
                               <div className="flex flex-col gap-1.5 relative text-left">
                                 <span className="font-sans font-bold text-slate-400 text-[10.5px] uppercase tracking-wider">Select Day</span>
                                 <select
-                                  value={slot.day}
+                                  value={slot.day || ''}
                                   onChange={(e) => {
                                     const updated = [...weeklySlots];
                                     updated[index].day = e.target.value;
@@ -1103,6 +1125,7 @@ function PostJobContent() {
                                   }}
                                   className="w-full px-4 py-3 bg-[#FAFBFD] border border-slate-200/80 hover:border-slate-300 rounded-xl text-slate-700 font-sans font-bold text-[13px] transition-all cursor-pointer focus:outline-none focus:border-[#137DC5] focus:ring-2 focus:ring-[#137DC5]/20"
                                 >
+                                  <option value="" disabled>Day</option>
                                   {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
                                     <option key={day} value={day}>{day}</option>
                                   ))}
@@ -1217,7 +1240,7 @@ function PostJobContent() {
                         <button
                           type="button"
                           onClick={() => {
-                            setMonthlySlots([...monthlySlots, { date: '24 May 2024', time: '12:00 PM' }]);
+                            setMonthlySlots([...monthlySlots, { date: '', time: '12:00 PM' }]);
                           }}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/70 hover:bg-blue-50 text-[#137DC5] rounded-xl font-sans font-bold text-[12px] transition-all cursor-pointer border border-blue-100/30"
                         >
@@ -1236,16 +1259,20 @@ function PostJobContent() {
                             {/* Date Selector */}
                             <div className="flex flex-col gap-1.5 relative text-left">
                               <span className="font-sans font-bold text-slate-400 text-[10.5px] uppercase tracking-wider">Select Date</span>
-                              <input
-                                type="date"
-                                value={convertToYYYYMMDD(slot.date)}
+                              <select
+                                value={slot.date || ''}
                                 onChange={(e) => {
                                   const updated = [...monthlySlots];
-                                  updated[index].date = convertToDDMMMYYYY(e.target.value);
+                                  updated[index].date = e.target.value.toString();
                                   setMonthlySlots(updated);
                                 }}
                                 className="w-full px-4 py-3 bg-[#FAFBFD] border border-slate-200/80 hover:border-slate-300 rounded-xl text-slate-700 font-sans font-bold text-[13px] transition-all cursor-pointer focus:outline-none focus:border-[#137DC5] focus:ring-2 focus:ring-[#137DC5]/20"
-                              />
+                              >
+                                <option value="" disabled>Day</option>
+                                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                                  <option key={d} value={d}>{d}</option>
+                                ))}
+                              </select>
                             </div>
 
                             {/* Time Selector */}
@@ -1294,6 +1321,12 @@ function PostJobContent() {
                     <Info className="w-4.5 h-4.5 text-[#137DC5] flex-shrink-0" />
                     <span>You can reschedule or modify the date later</span>
                   </div>
+
+                  {validationError && isScheduleError(validationError) && (
+                    <p className="mt-3 text-xs font-semibold text-red-500 text-left">
+                      ⚠ {validationError}
+                    </p>
+                  )}
 
                 </div>
 
@@ -1523,7 +1556,7 @@ function PostJobContent() {
                 )}
               </div>
             </div>
-            {validationError && (
+            {validationError && !isScheduleError(validationError) && (
               <div className="text-[#EF4444] text-[11px] font-bold text-left py-1.5 px-1 animate-pulse">
                 ⚠ {validationError}
               </div>
@@ -1784,7 +1817,7 @@ function PostJobContent() {
                   
                   {!isBiweekly && (
                     <button
-                      onClick={() => setWeeklySlots([...weeklySlots, { day: 'Monday', time: '12:00 PM' }])}
+                      onClick={() => setWeeklySlots([...weeklySlots, { day: '', time: '12:00 PM' }])}
                       className="text-[11px] font-bold text-[#137DC5] hover:underline cursor-pointer"
                     >
                       Add New
@@ -1810,7 +1843,7 @@ function PostJobContent() {
                             )}
                           </div>
                           <select
-                            value={slot.day}
+                            value={slot.day || ''}
                             onChange={(e) => {
                               const updated = [...weeklySlots];
                               updated[index].day = e.target.value;
@@ -1818,6 +1851,7 @@ function PostJobContent() {
                             }}
                             className="w-full px-2.5 py-1.5 bg-[#FAFBFD] border border-slate-200 rounded-lg text-[#092040] font-sans font-extrabold text-[11px] transition-all cursor-pointer focus:outline-none focus:border-[#137DC5] focus:ring-1 focus:ring-[#137DC5]"
                           >
+                            <option value="" disabled>Day</option>
                             {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
                               <option key={day} value={day}>{day}</option>
                             ))}
@@ -1904,7 +1938,7 @@ function PostJobContent() {
                 <div className="flex items-center justify-between">
                   <span className="font-sans font-bold text-xs text-slate-700">Monthly Dates</span>
                   <button
-                    onClick={() => setMonthlySlots([...monthlySlots, { date: '24 May 2024', time: '12:00 PM' }])}
+                    onClick={() => setMonthlySlots([...monthlySlots, { date: '', time: '12:00 PM' }])}
                     className="text-[11px] font-bold text-[#137DC5] hover:underline cursor-pointer"
                   >
                     Add New
@@ -1927,16 +1961,20 @@ function PostJobContent() {
                             </button>
                           )}
                         </div>
-                        <input
-                          type="date"
-                          value={convertToYYYYMMDD(slot.date)}
+                        <select
+                          value={slot.date || ''}
                           onChange={(e) => {
                             const updated = [...monthlySlots];
-                            updated[index].date = convertToDDMMMYYYY(e.target.value);
+                            updated[index].date = e.target.value.toString();
                             setMonthlySlots(updated);
                           }}
                           className="w-full px-2.5 py-1.5 bg-[#FAFBFD] border border-slate-200 rounded-lg text-[#092040] font-sans font-extrabold text-[11px] transition-all cursor-pointer focus:outline-none focus:border-[#137DC5] focus:ring-1 focus:ring-[#137DC5]"
-                        />
+                        >
+                          <option value="" disabled>Day</option>
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Time */}
@@ -1956,6 +1994,11 @@ function PostJobContent() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+            {validationError && isScheduleError(validationError) && (
+              <div className="text-[#EF4444] text-[11px] font-bold text-left py-1.5 px-1 mt-2 animate-pulse">
+                ⚠ {validationError}
               </div>
             )}
           </div>

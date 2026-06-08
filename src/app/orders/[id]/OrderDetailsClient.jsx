@@ -22,7 +22,14 @@ import {
   MessageSquare,
   RefreshCw,
   User,
-  Loader2
+  Loader2,
+  Bike,
+  Compass,
+  Home,
+  Navigation,
+  ShoppingBag,
+  Ruler,
+  Repeat
 } from 'lucide-react';
 import DashboardHeader from '@/components/DashboardHeader';
 import DashboardSidebar from '@/components/DashboardSidebar';
@@ -364,6 +371,25 @@ const formatDateStr = (dateStr) => {
   return `${day} ${month} ${year}`;
 };
 
+const getHaversineDistance = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const p1 = parseFloat(lat1);
+  const p2 = parseFloat(lon1);
+  const p3 = parseFloat(lat2);
+  const p4 = parseFloat(lon2);
+  if (isNaN(p1) || isNaN(p2) || isNaN(p3) || isNaN(p4)) return null;
+
+  const R = 6371; // Radius of the Earth in km
+  const dLat = (p3 - p1) * Math.PI / 180;
+  const dLon = (p4 - p2) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(p1 * Math.PI / 180) * Math.cos(p3 * Math.PI / 180) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+};
+
 function mapBackendOrderToUI(data) {
   const getInitials = (name) => {
     if (!name) return '';
@@ -380,29 +406,40 @@ function mapBackendOrderToUI(data) {
       role: data.worker.role || '',
       rating: data.worker.rating || 0.0,
       reviews: data.worker.reviews || 0,
-      arrivalTime: data.worker.arrivalTime || data.arrival_time || '',
+      arrivalTime: data.worker.arrivalTime || data.worker.arrival_time || data.arrival_time || '',
       initials: getInitials(data.worker.name || ''),
       gradient: 'from-blue-400 to-teal-500',
-      profile_photo: data.worker.profile_photo || data.worker.avatar || data.worker.worker_photo || null
+      profile_photo: data.worker.profile_photo || data.worker.avatar || data.worker.worker_photo || null,
+      latitude: data.worker.latitude || data.worker.worker_latitude || data.worker_latitude || null,
+      longitude: data.worker.longitude || data.worker.worker_longitude || data.worker_longitude || null,
+      travel_time_taken: data.worker.travel_time_taken || data.worker.total_travel_time || data.worker_travel_time_taken || null,
+      dispatch_time: data.worker.dispatch_time || data.worker_dispatch_time || null,
+      arrival_time_raw: data.worker.arrival_time || data.worker_arrival_time || null
     };
-  } else if (data.worker_name) {
+  } else if (data.worker_name || data.worker_latitude || data.worker_longitude) {
     workerVal = {
-      name: data.worker_name,
+      name: data.worker_name || 'Assigned Worker',
       role: data.worker_skill || '',
       rating: data.worker_rating || 0.0,
       reviews: data.worker_reviews || 0,
       arrivalTime: data.arrival_time || '',
-      initials: getInitials(data.worker_name),
+      initials: getInitials(data.worker_name || 'Worker'),
       gradient: 'from-blue-400 to-teal-500',
-      profile_photo: data.worker_profile_photo || data.profile_photo || data.worker_photo || null
+      profile_photo: data.worker_profile_photo || data.profile_photo || data.worker_photo || null,
+      latitude: data.worker_latitude || (data.worker && data.worker.latitude) || (data.worker && data.worker.worker_latitude) || null,
+      longitude: data.worker_longitude || (data.worker && data.worker.longitude) || (data.worker && data.worker.worker_longitude) || null,
+      travel_time_taken: data.worker_travel_time_taken || (data.worker && data.worker.travel_time_taken) || null,
+      dispatch_time: data.worker_dispatch_time || (data.worker && data.worker.dispatch_time) || null,
+      arrival_time_raw: data.worker_arrival_time || (data.worker && data.worker.arrival_time) || null
     };
   }
 
   const basePriceVal = data.pricing?.base_price ? parseFloat(data.pricing.base_price) : 0;
-  const extraHoursVal = data.pricing?.extra_work_hours ? parseInt(data.pricing.extra_work_hours, 10) : 0;
+  const extraHoursVal = data.pricing?.extra_work_hours ? parseFloat(data.pricing.extra_work_hours) : 0;
   const extraHoursAmountVal = data.pricing?.extra_work_hours_amount ? parseFloat(data.pricing.extra_work_hours_amount) : 0;
   const materialsFeeVal = data.pricing?.materials_fee ? parseFloat(data.pricing.materials_fee) : 0;
-  const totalAmountVal = data.pricing?.total_amount ? parseFloat(data.pricing.total_amount) : (basePriceVal + extraHoursAmountVal + materialsFeeVal);
+  const extraChargesVal = data.pricing?.extra_charges ? parseFloat(data.pricing.extra_charges) : 0;
+  const totalAmountVal = data.pricing?.total_amount ? parseFloat(data.pricing.total_amount) : (basePriceVal + extraHoursAmountVal + materialsFeeVal + extraChargesVal);
   const hourlyRateVal = data.pricing?.hourly_rate ? parseFloat(data.pricing.hourly_rate) : 0;
 
   // Let's determine payment summary
@@ -414,13 +451,13 @@ function mapBackendOrderToUI(data) {
 
   if (isMainPaid) {
     if (extraHoursStatusVal === 'approved') {
-      paidVal = basePriceVal + materialsFeeVal;
+      paidVal = basePriceVal + materialsFeeVal + extraChargesVal;
       pendingVal = extraHoursAmountVal;
     } else if (extraHoursStatusVal === 'paid' || extraHoursStatusVal === 'completed') {
       paidVal = totalAmountVal;
       pendingVal = 0;
     } else {
-      paidVal = basePriceVal + materialsFeeVal;
+      paidVal = basePriceVal + materialsFeeVal + extraChargesVal;
       pendingVal = 0;
     }
   } else {
@@ -461,6 +498,11 @@ function mapBackendOrderToUI(data) {
                           data.stripe?.client_secret || data.stripe_client_secret || null;
   const paymentIntentIdVal = data.paymentIntentId || data.order?.paymentIntentId || data.payment?.paymentIntentId || null;
 
+  // booking_hours: use pricing.total_hours first (API), then expected_time, then fallback
+  const bookingHoursVal = data.pricing?.total_hours || 
+                          parseInt(data.expected_time) || 
+                          data.pricing?.no_of_hours || data.no_of_hours || data.booking_hours || 1;
+
   return {
     bookingPrimaryId: data.bookingPrimaryId,
     booking_id: data.booking_id || data.order?.booking_id,
@@ -473,6 +515,13 @@ function mapBackendOrderToUI(data) {
     time: data.booking_time || '',
     address: data.service_address || '',
     worker: workerVal,
+    // API fields: rooms, area_sqm, frequency
+    no_rooms: data.rooms || data.no_rooms || null,
+    sqm: data.area_sqm || data.sqm || null,
+    service_frequency: data.frequency || data.service_frequency || null,
+    booking_hours: bookingHoursVal,
+    bookingLatitude: data.bookingLatitude || null,
+    bookingLongitude: data.bookingLongitude || null,
     requirements: {
       cleaning_materials: data.requirements?.cleaning_materials || false,
       vacuum_cleaner: data.requirements?.vacuum_cleaner || false
@@ -481,6 +530,8 @@ function mapBackendOrderToUI(data) {
       basePrice: `€${basePriceVal.toFixed(2)}`,
       extraHours: `€${extraHoursAmountVal.toFixed(2)}`,
       extraCharges: `€${materialsFeeVal.toFixed(2)}`,
+      materialsFee: `€${materialsFeeVal.toFixed(2)}`,
+      extraChargesActual: `€${extraChargesVal.toFixed(2)}`,
       totalAmount: `€${totalAmountVal.toFixed(2)}`,
       hourlyRate: `€${hourlyRateVal.toFixed(2)}`
     },
@@ -497,7 +548,9 @@ function mapBackendOrderToUI(data) {
     extraHoursStatus: extraHoursStatusVal,
     pendingExtraHours: pendingExtraHoursVal,
     clientSecret: clientSecretVal,
-    paymentIntentId: paymentIntentIdVal
+    paymentIntentId: paymentIntentIdVal,
+    materials: data.materials || [],
+    rawData: data
   };
 }
 
@@ -572,13 +625,13 @@ export default function OrderDetailsPage() {
       const rawStatus = (order.status || 'Pending').toLowerCase();
       setCurrentStatus(
         (rawStatus === 'pending' || rawStatus === 'upcoming') ? 'Pending' :
-        (rawStatus === 'in progress' || rawStatus === 'inprogress' || rawStatus === 'in-progress' || rawStatus === 'in_progress') ? 'Inprogress' : 
+        (rawStatus === 'in progress' || rawStatus === 'inprogress' || rawStatus === 'in-progress' || rawStatus === 'in_progress' || rawStatus === 'ininprogress' || rawStatus === 'travel' || rawStatus === 'travelling' || rawStatus === 'traveling' || rawStatus === 'started travel' || rawStatus === 'worker started travel' || rawStatus === 'start travel' || rawStatus === 'worker start travel' || rawStatus === 'worker_started_travel') ? 'Inprogress' : 
         (rawStatus === 'completed') ? 'Completed' :
         (rawStatus === 'cancelled') ? 'Cancelled' : 
         order.status
       );
       setExtraHoursCount(
-        order.extraHoursDetail ? parseInt(order.extraHoursDetail.hours) || 0 : 0
+        order.extraHoursDetail ? parseFloat(order.extraHoursDetail.hours) || 0 : 0
       );
       if (order.extraHoursStatus) {
         setAddHoursStatus(order.extraHoursStatus);
@@ -591,23 +644,49 @@ export default function OrderDetailsPage() {
 
   // State helpers
   const isPending = currentStatus === 'Pending';
-  const isInProgress = currentStatus === 'Inprogress';
+  const isInProgress = currentStatus === 'Inprogress' || 
+                       currentStatus === 'Ininprogress' || 
+                       currentStatus === 'Travel' || 
+                       currentStatus === 'Travelling' || 
+                       currentStatus === 'Traveling' || 
+                       currentStatus === 'Started Travel' || 
+                       currentStatus === 'Worker Started Travel' || 
+                       currentStatus === 'Start Travel' || 
+                       currentStatus === 'Worker Start Travel';
   const isCompleted = currentStatus === 'Completed';
   const isCancelled = currentStatus === 'Cancelled';
 
   // Math variables safely calculated from dynamic data
   const basePriceNum = order?.pricing?.basePrice ? parseFloat(order.pricing.basePrice.replace(/[^0-9.]/g, '')) : 0;
   const ratePerHour = order?.pricing?.hourlyRate ? parseFloat(order.pricing.hourlyRate.replace(/[^0-9.]/g, '')) : 20;
-  const activeExtraHours = order?.extraHoursDetail ? parseInt(order.extraHoursDetail.hours) || 0 : extraHoursCount;
+  const activeExtraHours = order?.extraHoursDetail ? parseFloat(order.extraHoursDetail.hours) || 0 : extraHoursCount;
   const extraHoursAmount = activeExtraHours * ratePerHour;
   const extraCharges = order?.pricing?.extraCharges ? parseFloat(order.pricing.extraCharges.replace(/[^0-9.]/g, '')) : 0;
+  const extraChargesActual = order?.pricing?.extraChargesActual ? parseFloat(order.pricing.extraChargesActual.replace(/[^0-9.]/g, '')) : 0;
   
-  const totalAmountNum = basePriceNum + extraHoursAmount + extraCharges;
+  const totalAmountNum = basePriceNum + extraHoursAmount + extraCharges + extraChargesActual;
   
-  const paidNum = (order?.status === 'Completed' || isCompleted) ? totalAmountNum : (order?.payment?.paid ? parseFloat(order.payment.paid.replace(/[^0-9.]/g, '')) : (basePriceNum + extraCharges));
+  const paidNum = (order?.status === 'Completed' || isCompleted) ? totalAmountNum : (order?.payment?.paid ? parseFloat(order.payment.paid.replace(/[^0-9.]/g, '')) : (basePriceNum + extraCharges + extraChargesActual));
   const pendingNum = Math.max(0, totalAmountNum - paidNum);
 
   const formatEuro = (amount) => `€${amount.toFixed(2)}`;
+
+  const formatTimeOnly = (dateTimeStr) => {
+    if (!dateTimeStr) return '--:--';
+    const parts = dateTimeStr.split(' ');
+    if (parts.length === 2) {
+      const timeParts = parts[1].split(':');
+      if (timeParts.length >= 2) return `${timeParts[0]}:${timeParts[1]}`;
+    }
+    return dateTimeStr;
+  };
+
+  const distanceKm = (order && order.bookingLatitude && order.bookingLongitude && order.worker && order.worker.latitude && order.worker.longitude)
+    ? getHaversineDistance(order.bookingLatitude, order.bookingLongitude, order.worker.latitude, order.worker.longitude)
+    : null;
+  const distanceStr = distanceKm !== null ? `${distanceKm.toFixed(1)} km` : '0.0 km';
+  const travelTimeStr = order?.worker?.travel_time_taken || '2 mins';
+  const durationAndDistanceStr = `${travelTimeStr} (${distanceStr})`;
 
   const handleBack = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -716,6 +795,74 @@ export default function OrderDetailsPage() {
 
   const handleBookAgain = () => {
     alert(`Booking service ${order.service} again`);
+  };
+
+  const handleRescheduleClick = () => {
+    if (!order || !order.rawData) {
+      router.push('/add-post');
+      return;
+    }
+    
+    const rawData = order.rawData;
+    const params = new URLSearchParams();
+    params.set('service', rawData.service_type || '');
+    if (rawData.service_id) params.set('service_id', rawData.service_id.toString());
+    params.set('rooms', (rawData.rooms || 1).toString());
+    params.set('sqm', (rawData.area_sqm || 30).toString());
+    params.set('expected_time', (rawData.expected_time || 2).toString());
+    params.set('date', rawData.booking_date || '');
+    params.set('location', rawData.service_address || '');
+    params.set('latitude', rawData.bookingLatitude || '');
+    params.set('longitude', rawData.bookingLongitude || '');
+    params.set('notes', rawData.note || rawData.notes || '');
+    
+    if (rawData.materials) {
+      const materialIds = Array.isArray(rawData.materials) 
+        ? rawData.materials.map(m => m.material_amount_id || m.id)
+        : [];
+      params.set('material_amount_ids', JSON.stringify(materialIds));
+    }
+    
+    const freq = rawData.frequency || 'One Time';
+    if (freq === 'Biweekly' || freq === 'BiWeekly') {
+      params.set('frequency', 'Weekly');
+      params.set('is_biweekly', 'true');
+      try {
+        const slots = typeof rawData.frequency_details === 'string' 
+          ? JSON.parse(rawData.frequency_details) 
+          : rawData.frequency_details;
+        if (Array.isArray(slots)) {
+          params.set('biweekly_days', JSON.stringify({
+            day1: slots[0]?.day || '1st Monday',
+            day2: slots[1]?.day || '3rd Tuesday'
+          }));
+          params.set('biweekly_times', JSON.stringify({
+            time1: slots[0]?.time || '12:00 PM',
+            time2: slots[1]?.time || '05:00 PM'
+          }));
+        }
+      } catch (e) {}
+    } else if (freq === 'Weekly') {
+      params.set('frequency', 'Weekly');
+      params.set('is_biweekly', 'false');
+      if (rawData.frequency_details) {
+        params.set('weekly_slots', typeof rawData.frequency_details === 'string' 
+          ? rawData.frequency_details 
+          : JSON.stringify(rawData.frequency_details));
+      }
+    } else if (freq === 'Monthly') {
+      params.set('frequency', 'Monthly');
+      if (rawData.frequency_details) {
+        params.set('monthly_slots', typeof rawData.frequency_details === 'string' 
+          ? rawData.frequency_details 
+          : JSON.stringify(rawData.frequency_details));
+      }
+    } else {
+      params.set('frequency', 'One Time');
+      params.set('booking_time', rawData.booking_time || '12:00 PM');
+    }
+    
+    router.push(`/add-post?${params.toString()}`);
   };
 
   const handleDownloadPDF = () => {
@@ -869,20 +1016,50 @@ export default function OrderDetailsPage() {
                     <div className="flex items-center gap-2">
                       <CircleDot className={`w-4 h-4 ${
                         isCompleted ? 'text-emerald-500' :
-                        isCancelled ? 'text-slate-400' :
+                        isCancelled ? 'text-red-500' :
                         'text-[#FFB300]'
                       }`} />
                       <span className={`font-sans font-extrabold text-[12.5px] tracking-wide ${
                         isCompleted ? 'text-emerald-500' :
-                        isCancelled ? 'text-slate-400' :
+                        isCancelled ? 'text-red-500' :
                         'text-[#FFB300]'
                       }`}>
-                        {currentStatus === 'Ininprogress' || currentStatus === 'Inprogress' ? 'In Progress' : currentStatus}
+                        {isInProgress ? 'In Progress' : currentStatus}
                       </span>
                     </div>
                   </>
                 )}
               </div>
+
+              {/* Rooms / sqm / Frequency Bar — always show when data present */}
+              {(order.no_rooms != null || order.sqm != null || order.service_frequency) && (
+                <div className="bg-white border border-slate-100 rounded-xl px-4 py-2.5 shadow-sm flex items-center justify-center gap-0 animate-fadeIn">
+                  {order.no_rooms != null && (
+                    <div className="flex items-center gap-2 flex-1 justify-center">
+                      <span className="text-sm">🏠</span>
+                      <span className="font-sans font-semibold text-[12px] text-slate-600">{order.no_rooms} Rooms</span>
+                    </div>
+                  )}
+                  {order.no_rooms != null && order.sqm != null && (
+                    <div className="w-px h-4 bg-slate-200" />
+                  )}
+                  {order.sqm != null && (
+                    <div className="flex items-center gap-2 flex-1 justify-center">
+                      <span className="text-sm">📐</span>
+                      <span className="font-sans font-semibold text-[12px] text-slate-600">{parseFloat(order.sqm).toFixed(0)} sqm</span>
+                    </div>
+                  )}
+                  {order.sqm != null && order.service_frequency && (
+                    <div className="w-px h-4 bg-slate-200" />
+                  )}
+                  {order.service_frequency && (
+                    <div className="flex items-center gap-2 flex-1 justify-center">
+                      <span className="text-sm">🔄</span>
+                      <span className="font-sans font-semibold text-[12px] text-slate-600 capitalize">{order.service_frequency}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Job Summary Card (Clean borderless details container) */}
               <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm flex flex-col gap-6 animate-fadeIn">
@@ -982,58 +1159,92 @@ export default function OrderDetailsPage() {
 
               {/* Worker Details Card */}
               {order.worker ? (
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fadeIn">
-                  <div className="flex items-center gap-3.5 text-left">
-                    <div className="w-12 h-12 rounded-full overflow-hidden shadow-inner flex-shrink-0 relative border border-slate-100 bg-slate-50 flex items-center justify-center">
-                      {order.worker.profile_photo ? (
-                        <img
-                          src={order.worker.profile_photo}
-                          alt={order.worker.name}
-                          className="w-full h-full object-cover relative z-10"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            const parent = e.currentTarget.parentElement;
-                            if (parent) {
-                              if (!parent.querySelector('.fallback-avatar')) {
-                                const fallback = document.createElement('div');
-                                fallback.className = `fallback-avatar w-full h-full flex items-center justify-center text-white font-display font-extrabold text-[15px] bg-gradient-to-tr ${order.worker.gradient}`;
-                                fallback.innerText = order.worker.initials;
-                                parent.appendChild(fallback);
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex flex-col gap-0 animate-fadeIn">
+                  {/* Top row: avatar + info + action icon */}
+                  <div className="flex sm:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-3.5 text-left">
+                      <div className="w-12 h-12 rounded-full overflow-hidden shadow-inner flex-shrink-0 relative border border-slate-100 bg-slate-50 flex items-center justify-center">
+                        {order.worker.profile_photo ? (
+                          <img
+                            src={order.worker.profile_photo}
+                            alt={order.worker.name}
+                            className="w-full h-full object-cover relative z-10"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) {
+                                if (!parent.querySelector('.fallback-avatar')) {
+                                  const fallback = document.createElement('div');
+                                  fallback.className = `fallback-avatar w-full h-full flex items-center justify-center text-white font-display font-extrabold text-[15px] bg-gradient-to-tr ${order.worker.gradient}`;
+                                  fallback.innerText = order.worker.initials;
+                                  parent.appendChild(fallback);
+                                }
                               }
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className={`w-full h-full flex items-center justify-center text-white font-display font-extrabold text-[15px] bg-gradient-to-tr ${order.worker.gradient}`}>
-                          {order.worker.initials}
+                            }}
+                          />
+                        ) : (
+                          <div className={`w-full h-full flex items-center justify-center text-white font-display font-extrabold text-[15px] bg-gradient-to-tr ${order.worker.gradient}`}>
+                            {order.worker.initials}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-sans text-[10px] text-slate-400 font-bold uppercase tracking-wider">Worker</span>
+                        <span className="font-sans font-extrabold text-[#092040] text-[15.5px] mt-0.5">{order.worker.name}</span>
+                        
+                        {/* rating block */}
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Star className="w-3.5 h-3.5 fill-[#FFB800] text-[#FFB800]" />
+                          <span className="font-sans font-extrabold text-[#092040] text-[11.5px] ml-0.5">
+                            {order.worker.rating}
+                          </span>
+                          <span className="font-sans font-semibold text-slate-400 text-[10px] ml-0.5">
+                            ({order.worker.reviews} reviews)
+                          </span>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-sans text-[10px] text-slate-400 font-bold uppercase tracking-wider">Worker</span>
-                      <span className="font-sans font-extrabold text-[#092040] text-[15.5px] mt-0.5">{order.worker.name}</span>
-                      
-                      {/* rating block */}
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Star className="w-3.5 h-3.5 fill-[#FFB800] text-[#FFB800]" />
-                        <span className="font-sans font-extrabold text-[#092040] text-[11.5px] ml-0.5">
-                          {order.worker.rating}
-                        </span>
-                        <span className="font-sans font-semibold text-slate-400 text-[10px] ml-0.5">
-                          ({order.worker.reviews} reviews)
-                        </span>
                       </div>
                     </div>
+
+                    {/* Right side: Chat button for cancelled, arrival time for others */}
+                    {isCancelled ? (
+                      <button
+                        onClick={() => {
+                          const bId = order.booking_id || order.id || '';
+                          const cleanId = bId.replace('#', '');
+                          const wName = order.worker?.name || 'Worker';
+                          const wId = order.rawData?.worker_pk_id || 101;
+                          const sName = order.service || '';
+                          const bDate = order.rawData?.booking_date || order.date || '';
+                          const bLoc = order.address || '';
+                          router.push(`/messages?booking_id=${cleanId}&worker_name=${encodeURIComponent(wName)}&worker_id=${wId}&service=${encodeURIComponent(sName)}&date=${encodeURIComponent(bDate)}&location=${encodeURIComponent(bLoc)}`);
+                        }}
+                        className="w-10 h-10 rounded-full bg-[#EEF6FD] border border-blue-100/50 flex items-center justify-center cursor-pointer hover:bg-[#DDEEF9] transition-colors flex-shrink-0"
+                      >
+                        <MessageSquare className="w-4.5 h-4.5 text-[#137DC5]" />
+                      </button>
+                    ) : (
+                      <div className="flex flex-col text-left sm:text-right justify-center">
+                        <span className="font-sans text-[10px] text-slate-400 font-bold uppercase tracking-wider">Worker Arrival Time</span>
+                        <div className="flex items-center sm:justify-end gap-1.5 font-sans font-extrabold text-[17px] mt-1 text-[#137DC5]">
+                          <Clock className="w-4.5 h-4.5" />
+                          <span>{durationAndDistanceStr}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Arrival time block (Perfect right alignment to match reference layout) */}
-                  <div className="flex flex-col text-left sm:text-right justify-center">
-                    <span className="font-sans text-[10px] text-slate-400 font-bold uppercase tracking-wider">Worker Arrival Time</span>
-                    <div className={`flex items-center sm:justify-end gap-1.5 font-sans font-extrabold text-[17px] mt-1 ${isCompleted ? 'text-[#19A859]' : 'text-[#137DC5]'}`}>
-                      <Clock className="w-4.5 h-4.5" />
-                      <span>{order.worker.arrivalTime}</span>
+                  {/* Bottom row for cancelled: Worker Arrival Time */}
+                  {isCancelled && (
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-slate-400" />
+                        <span className="font-sans font-medium text-slate-400 text-[12px]">Worker Arrival Time</span>
+                      </div>
+                      <span className="font-sans font-extrabold text-[#137DC5] text-[14px]">
+                        {order.worker.arrivalTime || '--:--'}
+                      </span>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex items-center gap-3.5 text-left animate-fadeIn">
@@ -1047,6 +1258,28 @@ export default function OrderDetailsPage() {
                 </div>
               )}
 
+              {/* Reschedule Banner for Cancelled Status */}
+              {isCancelled && (
+                <div className="bg-[#F4F9FD] border border-blue-100/60 rounded-2xl p-5 shadow-sm flex items-center justify-between gap-4 animate-fadeIn">
+                  <div className="flex gap-3 items-center text-left">
+                    <div className="w-10 h-10 rounded-full bg-[#E0EEFC] flex items-center justify-center text-[#0D6EFD] flex-shrink-0">
+                      <Info className="w-5 h-5 text-[#0D6EFD]" />
+                    </div>
+                    <div>
+                      <p className="font-sans text-[13.5px] text-slate-700 font-semibold leading-relaxed">
+                        You can easily pick a new time that works better for you.
+                      </p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => router.push('/add-post')}
+                    className="px-5 py-2.5 bg-[#0D6EFD] hover:bg-[#0D6EFD]/90 text-white font-sans font-bold text-[13px] rounded-xl shadow-md transition-all cursor-pointer flex-shrink-0 hover:-translate-y-0.5 active:translate-y-0"
+                  >
+                    Reschedule
+                  </button>
+                </div>
+              )}
+
               {/* Travel Timeline Tracker (Only for In Progress state) */}
               {isInProgress && (
                 <div className="bg-[#F0F5FA]/60 border border-blue-100/50 rounded-2xl p-5 shadow-sm text-left animate-fadeIn">
@@ -1057,28 +1290,86 @@ export default function OrderDetailsPage() {
                     {/* Step 1 */}
                     <div className="relative flex flex-col items-start text-left">
                       <div className="absolute -left-10 w-8 h-8 rounded-full bg-white border-2 border-[#137DC5] flex items-center justify-center text-[#137DC5] shadow-sm">
-                        <Car className="w-4 h-4" />
+                        <Bike className="w-4 h-4" />
                       </div>
-                      <span className="font-sans font-extrabold text-[#092040] text-[13px]">Worker Started Travel</span>
-                      <span className="font-sans font-bold text-slate-400 text-[11px] mt-0.5">Today, 08:15</span>
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-sans font-extrabold text-[#092040] text-[13px]">Worker Started Travel</span>
+                        <span className="font-sans font-extrabold text-[10px] text-white bg-[#0D6EFD] px-2 py-0.5 rounded-full ml-2">
+                          {durationAndDistanceStr}
+                        </span>
+                      </div>
                     </div>
                     
                     {/* Step 2 */}
                     <div className="relative flex flex-col items-start text-left">
                       <div className="absolute -left-10 w-8 h-8 rounded-full bg-white border-2 border-[#137DC5] flex items-center justify-center text-[#137DC5] shadow-sm">
-                        <MapPin className="w-4 h-4" />
+                        <Car className="w-4 h-4" />
                       </div>
-                      <span className="font-sans font-extrabold text-[#092040] text-[13px]">Estimated Arrival Time</span>
-                      <span className="font-sans font-bold text-slate-400 text-[11px] mt-0.5">Today, 08:55</span>
+                      <span className="font-sans font-extrabold text-[#092040] text-[13px]">Worker Started Travel</span>
+                      <span className="font-sans font-bold text-slate-400 text-[11px] mt-0.5">
+                        {order?.worker?.dispatch_time ? formatTimeOnly(order.worker.dispatch_time) : '--:--'}
+                      </span>
                     </div>
                     
                     {/* Step 3 */}
                     <div className="relative flex flex-col items-start text-left">
-                      <div className="absolute -left-10 w-8 h-8 rounded-full bg-white border-2 border-[#137DC5] flex items-center justify-center text-[#137DC5] shadow-sm">
-                        <Sparkles className="w-4 h-4" />
+                      <div className="absolute -left-10 w-8 h-8 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center text-slate-400 shadow-sm">
+                        <MapPin className="w-4 h-4" />
                       </div>
-                      <span className="font-sans font-extrabold text-[#092040] text-[13px]">Service Start Time (Estimated)</span>
-                      <span className="font-sans font-bold text-slate-400 text-[11px] mt-0.5">Today, 10:00</span>
+                      <span className="font-sans font-extrabold text-slate-400 text-[13px]">Estimated Arrival Time</span>
+                      <span className="font-sans font-bold text-slate-400 text-[11px] mt-0.5">{durationAndDistanceStr}</span>
+                    </div>
+                    
+                    {/* Step 4 */}
+                    <div className="relative flex flex-col items-start text-left">
+                      <div className="absolute -left-10 w-8 h-8 rounded-full bg-white border-2 border-slate-200 flex items-center justify-center text-slate-400 shadow-sm">
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <span className="font-sans font-extrabold text-slate-400 text-[13px]">Service Start Time (Estimated)</span>
+                      <span className="font-sans font-bold text-slate-400 text-[11px] mt-0.5">Today, {order.time}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Live Location Card (Desktop) */}
+              {isInProgress && order.worker && order.worker.latitude && (
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-fadeIn">
+                  <h3 className="flex items-center gap-2 font-sans font-bold text-[#092040] text-[13.5px]">
+                    <Compass size={16} className="text-[#137DC5]" /> Live Location
+                  </h3>
+                  
+                  <div className="flex flex-col gap-4 font-sans text-[12.5px] font-semibold text-slate-400">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#EAF4FC] flex items-center justify-center text-[#137DC5] flex-shrink-0">
+                        <MapPin size={15} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-sans text-[10px] text-slate-400 font-bold uppercase tracking-wider">Worker Location</span>
+                        <span className="font-sans font-extrabold text-[#092040] text-[13.5px] mt-0.5">
+                          {parseFloat(order.worker.latitude).toFixed(5)}, {parseFloat(order.worker.longitude).toFixed(5)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#E8F6EE] flex items-center justify-center text-[#19A859] flex-shrink-0">
+                        <Home size={15} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-sans text-[10px] text-slate-400 font-bold uppercase tracking-wider">Service Location</span>
+                        <span className="font-sans font-extrabold text-[#092040] text-[13.5px] mt-0.5">{order.address}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-dashed border-slate-200 my-1"></div>
+                    
+                    <div className="flex justify-between items-center text-[#092040] font-extrabold text-[14px]">
+                      <div className="flex items-center gap-2">
+                        <Navigation size={14} className="text-slate-400" style={{ transform: 'rotate(45deg)' }} />
+                        <span className="font-sans font-bold text-slate-400 text-[12px]">Distance to Service</span>
+                      </div>
+                      <span className="font-sans font-extrabold text-[#137DC5] text-[13.5px]">{durationAndDistanceStr}</span>
                     </div>
                   </div>
                 </div>
@@ -1097,20 +1388,22 @@ export default function OrderDetailsPage() {
                     <span className="w-1/3 text-right text-slate-700">{formatEuro(basePriceNum)}</span>
                   </div>
                   
-                  {activeExtraHours > 0 && (
-                    <div className="flex justify-between items-center">
-                      <span className="w-1/3 text-left">Extra Work Hours</span>
-                      <span className="w-1/3 text-center text-slate-500 font-medium">
-                        {activeExtraHours} Hour(s)
-                      </span>
-                      <span className="w-1/3 text-right text-slate-700 font-bold">{formatEuro(extraHoursAmount)}</span>
-                    </div>
-                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="w-1/3 text-left">Extra Work Hours</span>
+                    <span className="w-1/3 text-center text-slate-500 font-medium">{activeExtraHours} Hour(s)</span>
+                    <span className="w-1/3 text-right text-slate-700 font-bold">{formatEuro(extraHoursAmount)}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="w-1/3 text-left">Materials Fee</span>
+                    <span className="w-1/3"></span>
+                    <span className="w-1/3 text-right text-slate-700">{order?.pricing?.materialsFee || '€0.00'}</span>
+                  </div>
                   
                   <div className="flex justify-between items-center">
                     <span className="w-1/3 text-left">Extra Charges</span>
                     <span className="w-1/3"></span>
-                    <span className="w-1/3 text-right text-slate-700">{order?.pricing?.extraCharges || '€0.00'}</span>
+                    <span className="w-1/3 text-right text-slate-700">{order?.pricing?.extraChargesActual || '€0.00'}</span>
                   </div>
                   
                   {/* Dotted border line */}
@@ -1166,7 +1459,7 @@ export default function OrderDetailsPage() {
                 )}
 
                 {isPending && (
-                  <div className="bg-[#F4F9FD] border border-blue-100/60 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-2">
+                  <div className="bg-[#F4F9FD] border border-blue-100/60 rounded-xl p-4 flex items-center mt-2">
                     <div className="flex gap-2.5 items-start text-left max-w-lg">
                       <Info className="w-4.5 h-4.5 text-[#137DC5] flex-shrink-0 mt-0.5" />
                       <div className="flex flex-col">
@@ -1178,16 +1471,27 @@ export default function OrderDetailsPage() {
                         </p>
                       </div>
                     </div>
-
-                    <button 
-                      onClick={handleReschedule}
-                      className="px-4 py-2 bg-[#137DC5] hover:bg-[#137DC5]/90 text-white font-sans font-bold text-[12.5px] rounded-lg shadow-sm transition-all cursor-pointer flex-shrink-0"
-                    >
-                      Reschedule
-                    </button>
                   </div>
                 )}
               </div>
+
+              {/* Cleaning Materials Required Card (Desktop) */}
+              {order?.materials && order.materials.length > 0 && (
+                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-fadeIn">
+                  <h3 className="flex items-center gap-2 font-sans font-bold text-[#092040] text-[13.5px]">
+                    <ShoppingBag size={16} className="text-[#137DC5]" /> Cleaning Materials Required
+                  </h3>
+                  
+                  <div className="flex flex-col gap-3 font-sans text-[12.5px] font-semibold text-slate-650">
+                    {order.materials.map((mat) => (
+                      <div key={mat.id} className="flex justify-between items-center border-b border-dashed border-slate-100 pb-2.5 last:border-b-0 last:pb-0">
+                        <span className="text-slate-600">{mat.name}</span>
+                        <span className="text-[#137DC5] font-bold">Yes</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Extra Work Hours Detail Grid (For Completed and In Progress with vertical dividers matching mockup) */}
               {(isCompleted || isInProgress || isPending) && activeExtraHours > 0 && (
@@ -1227,50 +1531,8 @@ export default function OrderDetailsPage() {
                 </div>
               )}
 
-              {/* Cleaning Materials Required */}
-              {(currentStatus === 'Completed' || isInProgress || isPending) && (
-                <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm flex items-start gap-4 animate-fadeIn">
-                  {/* Left Column: Premium Cleaning Basket Icon container */}
-                  <div className={`w-12 h-12 rounded-xl border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-[#E8F6EE] border-emerald-100/35 text-[#19A859]' : 'bg-blue-50/70 border-blue-100/35 text-[#137DC5]'}`}>
-                    <svg className="w-5.5 h-5.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      {/* Basket frame */}
-                      <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" />
-                      {/* Handle */}
-                      <path d="M8 9V6a4 4 0 0 1 8 0v3" />
-                      {/* Spray bottle 1 neck & nozzle */}
-                      <path d="M6 5h2M7 5v4" strokeWidth="2.2" />
-                      {/* Spray bottle 2 neck & nozzle */}
-                      <path d="M16 4h2M17 4v5" strokeWidth="2.2" />
-                      {/* Basket weave line details */}
-                      <line x1="8" y1="13" x2="8" y2="17" />
-                      <line x1="12" y1="13" x2="12" y2="17" />
-                      <line x1="16" y1="13" x2="16" y2="17" />
-                    </svg>
-                  </div>
-                  
-                  {/* Right Column: Key-value rows */}
-                  <div className="flex-grow flex flex-col gap-2 font-sans text-[12.5px] font-semibold text-slate-500 text-left">
-                    <h3 className="font-sans font-bold text-[#092040] text-[13.5px] mb-0.5">
-                      Cleaning Materials Required
-                    </h3>
-                    <div className="flex justify-between items-center py-1.5 border-b border-slate-50">
-                      <span className="text-slate-450 font-medium">Cleaning Materials Required</span>
-                      <span className={(order.materials?.required === 'Yes' || order.requirements?.cleaning_materials) ? 'text-emerald-500 font-extrabold' : 'text-slate-500 font-bold'}>
-                        {(order.materials?.required === 'Yes' || order.requirements?.cleaning_materials) ? 'Yes' : 'No'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center py-1.5">
-                      <span className="text-slate-455 font-medium">Vacuum Cleaner Required</span>
-                      <span className={(order.materials?.vacuum === 'Yes' || order.requirements?.vacuum_cleaner) ? 'text-emerald-500 font-extrabold' : 'text-slate-500 font-bold'}>
-                        {(order.materials?.vacuum === 'Yes' || order.requirements?.vacuum_cleaner) ? 'Yes' : 'No'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Payment Summary Box */}
-              {(isPending || addHoursStatus === 'approved') && (
+              {!isPending && addHoursStatus === 'approved' && (
                 <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm text-left animate-fadeIn">
                   <h3 className="font-sans font-bold text-[#092040] text-[13.5px] mb-4">
                     Payment Summary
@@ -1353,14 +1615,23 @@ export default function OrderDetailsPage() {
                   </>
                 )}
 
-                {(currentStatus !== 'Completed' && !isInProgress) && (
-                  <button 
-                    onClick={handleConfirmBooking}
-                    className="w-full px-6 py-3.5 bg-[#137DC5] hover:bg-[#137DC5]/90 text-white font-sans font-bold text-[13.5px] rounded-xl shadow-md transition-all hover:-translate-y-0.5 cursor-pointer"
-                  >
-                    Confirm Booking
-                  </button>
+                {isCancelled && (
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button 
+                      onClick={() => router.push('/dashboard/orders')}
+                      className="flex-1 px-6 py-3 border border-slate-200 hover:border-slate-300 font-sans font-bold text-slate-600 text-[13.5px] rounded-xl hover:bg-slate-50 transition-all cursor-pointer"
+                    >
+                      View Details
+                    </button>
+                    <button 
+                      onClick={() => router.push('/add-post')}
+                      className="flex-1 px-6 py-3 bg-[#0D6EFD] hover:bg-[#0D6EFD]/90 text-white font-sans font-bold text-[13.5px] rounded-xl shadow-md transition-all hover:-translate-y-0.5 cursor-pointer"
+                    >
+                      Reschedule
+                    </button>
+                  </div>
                 )}
+
               </div>
             </div>
           </div>
@@ -1368,7 +1639,7 @@ export default function OrderDetailsPage() {
       </div>
 
       {/* MOBILE VIEW */}
-      <div className="flex flex-col md:hidden min-h-screen bg-white" style={{ fontFamily: 'Inter, sans-serif' }}>
+      <div className="flex flex-col md:hidden min-h-screen bg-[#FAFCFF]" style={{ fontFamily: 'Inter, sans-serif' }}>
         {/* Mobile Header */}
         <div style={{
           display: 'flex',
@@ -1378,7 +1649,8 @@ export default function OrderDetailsPage() {
           background: 'white',
           position: 'sticky',
           top: 0,
-          zIndex: 50
+          zIndex: 50,
+          borderBottom: '1px solid #F1F5F9'
         }}>
           <button
             onClick={handleBack}
@@ -1424,138 +1696,180 @@ export default function OrderDetailsPage() {
         {/* Scrollable Content */}
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 110 }}>
           
-          {/* Status Row Bar */}
+          {/* Order Info Card (Order ID + Status badge, Pills, Service Stack) */}
           <div style={{
             background: 'white',
-            borderRadius: 8,
-            padding: '10px 14px',
-            margin: '10px 16px 0 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            border: '1px solid #F1F5F9'
+            borderRadius: 16,
+            padding: 16,
+            margin: '12px 16px',
+            border: '1px solid #F1F5F9',
+            boxShadow: '0 4px 12px rgba(9, 32, 64, 0.04)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <div style={{
-                width: 5,
-                height: 5,
-                borderRadius: '50%',
-                background: isCompleted ? '#19A859' : isPending ? '#F59E0B' : isInProgress ? '#0D6EFD' : '#94A3B8'
-              }} />
-              <span style={{
-                fontWeight: 600,
-                fontSize: 10,
-                color: isCompleted ? '#19A859' : isPending ? '#F59E0B' : isInProgress ? '#0D6EFD' : '#94A3B8'
-              }}>
-                {currentStatus === 'Ininprogress' || currentStatus === 'Inprogress' ? 'In Progress' : currentStatus}
+            {/* Top row: Order ID & Status */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#092040' }}>
+                Order ID: {order.booking_id || order.id}
               </span>
-            </div>
-            <span style={{ fontSize: 9.5, fontWeight: 500, color: '#94A3B8' }}>
-              Order ID:{order.id}
-            </span>
-          </div>
-
-          {/* Service Card */}
-          <div style={{
-            background: 'white',
-            margin: '16px 16px 0 16px',
-            display: 'flex',
-            gap: 12,
-            alignItems: 'flex-start'
-          }}>
-            <div style={{
-              width: 70,
-              height: 70,
-              background: '#F8FAFC',
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              padding: 4
-            }}>
-              {isImageUrl(order.image) ? (
-                <img
-                  src={order.image}
-                  alt={order.service}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                />
-              ) : (order.service === 'Home Cleaning' || order.image === 'vacuum_cleaner') ? (
-                <svg width="100%" height="100%" viewBox="0 0 64 64" fill="none">
-                  <rect width="64" height="64" rx="12" fill="#E0F2FE"/>
-                  <path d="M26 38 C26 34.686 28.686 32 32 32 C35.314 32 38 34.686 38 38 C38 41.314 35.314 44 32 44 C28.686 44 26 41.314 26 38 Z" fill="#137DC5" />
-                  <circle cx="32" cy="38" r="3" fill="#E0F2FE" />
-                  <rect x="30" y="18" width="4" height="14" rx="1.5" fill="#137DC5" />
-                  <path d="M32 18 L26 12" stroke="#137DC5" strokeWidth="2.5" strokeLinecap="round" />
-                  <path d="M24 43.5 L40 43.5" stroke="#137DC5" strokeWidth="3.5" strokeLinecap="round" />
-                  <path d="M46 22 L47.5 24.5 L50 25.5 L47.5 26.5 L46 29 L44.5 26.5 L42 25.5 L44.5 24.5 Z" fill="#F59E0B" />
-                  <path d="M18 24 L19 25.5 L21 26 L19 26.5 L18 28 L17 26.5 L15 26 L17 25.5 Z" fill="#F59E0B" opacity="0.8" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 100 100" style={{ width: 40, height: 40 }} className="text-[#137DC5]">
-                  {order.service === 'Plumbing' && (
-                    <path d="M50 20 C35 35 35 55 50 70 C65 55 65 35 50 20 Z" fill="currentColor" opacity="0.8" />
-                  )}
-                  {order.service === 'Electrical' && (
-                    <polygon points="55,15 30,55 50,55 45,85 70,45 50,45" fill="currentColor" />
-                  )}
-                  {order.service === 'Painting' && (
-                    <path d="M30 20 H70 V50 C70 60 60 70 50 70 C40 70 30 60 30 50 Z M50 70 V90" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
-                  )}
-                </svg>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: isCompleted ? '#19A859' : isPending ? '#F59E0B' : isInProgress ? '#FBBF24' : isCancelled ? '#EF4444' : '#94A3B8'
+                }} />
+                <span style={{
+                  fontWeight: 700,
+                  fontSize: 11,
+                  color: isCompleted ? '#19A859' : isPending ? '#F59E0B' : isInProgress ? '#FBBF24' : isCancelled ? '#EF4444' : '#94A3B8'
+                }}>
+                  {isInProgress ? 'In Progress' : currentStatus}
+                </span>
+              </div>
             </div>
 
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                <h2 style={{ fontWeight: 800, fontSize: 13, color: '#092040', margin: 0 }}>
-                  {order.service}
-                </h2>
-                {isCompleted && (
-                  <Link 
-                    href={`/orders/${(rawId || '').toLowerCase()}/review`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 2,
-                      textDecoration: 'none',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '20px',
-                      padding: '2px 6px',
-                      background: 'white'
-                    }}
-                  >
-                    <span style={{ fontSize: 8.5, fontWeight: 700, color: '#092040', whiteSpace: 'nowrap' }}>Write a Review</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Star size={8} fill="#FFB800" color="#FFB800" />
-                      <Star size={8} fill="none" color="#CBD5E1" />
-                    </div>
-                  </Link>
+            {/* Pills Row (Rooms, sqm, Frequency) */}
+            {(order.no_rooms != null || order.sqm != null || order.service_frequency) && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                marginTop: 12
+              }}>
+                {order.no_rooms != null && (
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    background: '#F1F7FC',
+                    border: '1px solid #E1EDF7',
+                    borderRadius: 12,
+                    padding: '8px 4px',
+                    color: '#092040',
+                    fontSize: 11,
+                    fontWeight: 700
+                  }}>
+                    <Home size={14} color="#137DC5" />
+                    <span>{order.no_rooms} Rooms</span>
+                  </div>
+                )}
+                {order.sqm != null && (
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    background: '#F1F7FC',
+                    border: '1px solid #E1EDF7',
+                    borderRadius: 12,
+                    padding: '8px 4px',
+                    color: '#092040',
+                    fontSize: 11,
+                    fontWeight: 700
+                  }}>
+                    <Ruler size={14} color="#137DC5" />
+                    <span>{parseFloat(order.sqm).toFixed(0)} sqm</span>
+                  </div>
+                )}
+                {order.service_frequency && (
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    background: '#F1F7FC',
+                    border: '1px solid #E1EDF7',
+                    borderRadius: 12,
+                    padding: '8px 4px',
+                    color: '#092040',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: 'capitalize'
+                  }}>
+                    <Repeat size={14} color="#137DC5" />
+                    <span>{order.service_frequency}</span>
+                  </div>
                 )}
               </div>
+            )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <Calendar size={12} color="#94A3B8" style={{ marginTop: 1, flexShrink: 0 }} />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Clean Date</span>
-                    <span style={{ fontSize: 9.5, fontWeight: 650, color: '#64748B' }}>Today, {order.date}</span>
+            {/* Service Stack details */}
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginTop: 16 }}>
+              <div style={{
+                width: 76,
+                height: 76,
+                background: '#FAFBFD',
+                borderRadius: 14,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                border: '1px solid #E9EFF6',
+                overflow: 'hidden'
+              }}>
+                {isImageUrl(order.image) ? (
+                  <img
+                    src={order.image}
+                    alt={order.service}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                ) : (order.service === 'Home Cleaning' || order.image === 'vacuum_cleaner') ? (
+                  <svg width="100%" height="100%" viewBox="0 0 64 64" fill="none">
+                    <rect width="64" height="64" rx="12" fill="#E0F2FE"/>
+                    <path d="M26 38 C26 34.686 28.686 32 32 32 C35.314 32 38 34.686 38 38 C38 41.314 35.314 44 32 44 C28.686 44 26 41.314 26 38 Z" fill="#137DC5" />
+                    <circle cx="32" cy="38" r="3" fill="#E0F2FE" />
+                    <rect x="30" y="18" width="4" height="14" rx="1.5" fill="#137DC5" />
+                    <path d="M32 18 L26 12" stroke="#137DC5" strokeWidth="2.5" strokeLinecap="round" />
+                    <path d="M24 43.5 L40 43.5" stroke="#137DC5" strokeWidth="3.5" strokeLinecap="round" />
+                    <path d="M46 22 L47.5 24.5 L50 25.5 L47.5 26.5 L46 29 L44.5 26.5 L42 25.5 L44.5 24.5 Z" fill="#F59E0B" />
+                    <path d="M18 24 L19 25.5 L21 26 L19 26.5 L18 28 L17 26.5 L15 26 L17 25.5 Z" fill="#F59E0B" opacity="0.8" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 100 100" style={{ width: 40, height: 40 }} className="text-[#137DC5]">
+                    {order.service === 'Plumbing' && (
+                      <path d="M50 20 C35 35 35 55 50 70 C65 55 65 35 50 20 Z" fill="currentColor" opacity="0.8" />
+                    )}
+                    {order.service === 'Electrical' && (
+                      <polygon points="55,15 30,55 50,55 45,85 70,45 50,45" fill="currentColor" />
+                    )}
+                    {order.service === 'Painting' && (
+                      <path d="M30 20 H70 V50 C70 60 60 70 50 70 C40 70 30 60 30 50 Z M50 70 V90" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+                    )}
+                  </svg>
+                )}
+              </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, textAlign: 'left' }}>
+                <h2 style={{ fontWeight: 800, fontSize: 16, color: '#092040', margin: 0 }}>
+                  {order.service}
+                </h2>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <Calendar size={13} color="#94A3B8" style={{ marginTop: 1, flexShrink: 0 }} />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Clean Date</span>
+                      <span style={{ fontSize: 11, fontWeight: 750, color: '#092040', marginTop: 1 }}>{order.date}</span>
+                    </div>
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <Clock size={12} color="#94A3B8" style={{ marginTop: 1, flexShrink: 0 }} />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Time</span>
-                    <span style={{ fontSize: 9.5, fontWeight: 650, color: '#64748B' }}>{order.time}</span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <Clock size={13} color="#94A3B8" style={{ marginTop: 1, flexShrink: 0 }} />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Time</span>
+                      <span style={{ fontSize: 11, fontWeight: 750, color: '#092040', marginTop: 1 }}>{order.time}</span>
+                    </div>
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <MapPin size={12} color="#94A3B8" style={{ marginTop: 1, flexShrink: 0 }} />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Address</span>
-                    <span style={{ fontSize: 9.5, fontWeight: 650, color: '#64748B', lineHeight: 1.3 }}>{order.address}</span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <MapPin size={13} color="#94A3B8" style={{ marginTop: 1, flexShrink: 0 }} />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Address</span>
+                      <span style={{ fontSize: 11, fontWeight: 750, color: '#092040', marginTop: 1, lineHeight: 1.3 }}>{order.address}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1566,143 +1880,436 @@ export default function OrderDetailsPage() {
           {order.worker && (
             <div style={{
               background: 'white',
-              padding: '16px',
-              margin: '0 16px',
+              borderRadius: 16,
+              padding: 16,
+              margin: '12px 16px',
+              border: '1px solid #F1F5F9',
+              boxShadow: '0 4px 12px rgba(9, 32, 64, 0.04)',
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid #F1F5F9'
+              flexDirection: 'column',
+              gap: 0
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
+                  <div style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    background: '#F8FAFC',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    position: 'relative'
+                  }}>
+                    {order.worker.profile_photo ? (
+                      <img
+                        src={order.worker.profile_photo}
+                        alt={order.worker.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const parent = e.currentTarget.parentElement;
+                          if (parent && !parent.querySelector('.fallback-avatar-mobile')) {
+                            const fallback = document.createElement('div');
+                            fallback.className = 'fallback-avatar-mobile w-full h-full flex items-center justify-center text-white font-extrabold text-[12px] bg-gradient-to-tr ' + order.worker.gradient;
+                            fallback.innerText = order.worker.initials;
+                            fallback.style.width = '100%';
+                            fallback.style.height = '100%';
+                            fallback.style.display = 'flex';
+                            fallback.style.alignItems = 'center';
+                            fallback.style.justifyContent = 'center';
+                            parent.appendChild(fallback);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        background: 'linear-gradient(135deg, #4facfe, #00f2fe)',
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontWeight: 800,
+                        fontSize: 12
+                      }}>
+                        {order.worker.initials}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 600 }}>Worker</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#092040', marginTop: 1 }}>{order.worker.name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 2 }}>
+                      <Star size={10} fill="#FFB800" color="#FFB800" />
+                      <span style={{ fontSize: 9.5, fontWeight: 600, color: '#94A3B8' }}>
+                        <span style={{ color: '#092040', fontWeight: 700 }}>{order.worker.rating}</span>
+                        {' '}({order.worker.reviews || 0} reviews)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    background: '#EAF4FC',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                  onClick={() => {
+                    const bId = order.booking_id || order.id || '';
+                    const cleanId = bId.replace('#', '');
+                    const wName = order.worker?.name || 'Worker';
+                    const wId = order.rawData?.worker_pk_id || 101;
+                    const sName = order.service || '';
+                    const bDate = order.rawData?.booking_date || order.date || '';
+                    const bLoc = order.address || '';
+                    router.push(`/messages?booking_id=${cleanId}&worker_name=${encodeURIComponent(wName)}&worker_id=${wId}&service=${encodeURIComponent(sName)}&date=${encodeURIComponent(bDate)}&location=${encodeURIComponent(bLoc)}`);
+                  }}
+                >
+                  <MessageSquare size={16} color="#137DC5" />
+                </button>
+              </div>
+
+              {/* Worker Arrival Time Section */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: 12,
+                paddingTop: 12,
+                borderTop: '1px solid #F1F5F9'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock size={14} color="#137DC5" />
+                  <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600 }}>Worker Arrival Time</span>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 750, color: '#137DC5' }}>{durationAndDistanceStr}</span>
+              </div>
+            </div>
+          )}
+
+          {isCancelled && (
+            <div style={{
+              background: '#F0F7FD',
+              borderRadius: 12,
+              padding: '14px 16px',
+              margin: '16px 16px 0 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              textAlign: 'left'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
                 <div style={{
-                  width: 44,
-                  height: 44,
+                  width: 24,
+                  height: 24,
                   borderRadius: '50%',
-                  overflow: 'hidden',
-                  background: '#F8FAFC',
+                  background: '#E0EEFC',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flexShrink: 0,
-                  position: 'relative'
+                  flexShrink: 0
                 }}>
-                  {order.worker.profile_photo ? (
-                    <img
-                      src={order.worker.profile_photo}
-                      alt={order.worker.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        const parent = e.currentTarget.parentElement;
-                        if (parent && !parent.querySelector('.fallback-avatar-mobile')) {
-                          const fallback = document.createElement('div');
-                          fallback.className = 'fallback-avatar-mobile w-full h-full flex items-center justify-center text-white font-extrabold text-[12px] bg-gradient-to-tr ' + order.worker.gradient;
-                          fallback.innerText = order.worker.initials;
-                          fallback.style.width = '100%';
-                          fallback.style.height = '100%';
-                          fallback.style.display = 'flex';
-                          fallback.style.alignItems = 'center';
-                          fallback.style.justifyContent = 'center';
-                          parent.appendChild(fallback);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-white font-extrabold text-[12px]" style={{
-                      background: 'linear-gradient(135deg, #4facfe, #00f2fe)',
-                      width: '100%',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      {order.worker.initials}
-                    </div>
-                  )}
+                  <Info size={14} color="#0D6EFD" />
                 </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Worker</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#092040', marginTop: 1 }}>{order.worker.name}</span>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 2 }}>
-                    <Star size={9} fill="#FFB800" color="#FFB800" />
-                    <span style={{ fontSize: 8.5, fontWeight: 600, color: '#94A3B8' }}>
-                      <span style={{ color: '#FFB800', fontWeight: 700 }}>{order.worker.rating}</span>({order.worker.reviews} reviews)
-                    </span>
-                  </div>
-                </div>
+                <span style={{ fontSize: 11, fontWeight: 550, color: '#334155', lineHeight: 1.3 }}>
+                  You can easily pick a new time that works better for you.
+                </span>
               </div>
+              <button
+                onClick={handleRescheduleClick}
+                style={{
+                  background: '#0D6EFD',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '8px 16px',
+                  fontWeight: 700,
+                  fontSize: 11.5,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 4px rgba(13, 110, 253, 0.15)'
+                }}
+              >
+                Reschedule
+              </button>
+            </div>
+          )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textAlign: 'right' }}>
-                <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Worker Arrival Time</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, color: '#0D6EFD' }}>
-                  <Clock size={12} color="#0D6EFD" />
-                  <span style={{ fontSize: 11, fontWeight: 700 }}>{order.worker.arrivalTime}</span>
+          {/* Timeline tracker */}
+          {isInProgress && (
+            <div style={{
+              background: 'white',
+              borderRadius: 16,
+              padding: 16,
+              margin: '12px 16px',
+              border: '1px solid #F1F5F9',
+              boxShadow: '0 4px 12px rgba(9, 32, 64, 0.04)'
+            }}>
+              <div style={{ position: 'relative', paddingLeft: 36, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* Vertical Line */}
+                <div style={{
+                  position: 'absolute',
+                  left: 14,
+                  top: 8,
+                  bottom: 8,
+                  width: 2,
+                  borderLeft: '2px dashed #E2E8F0'
+                }} />
+                
+                {/* Step 1: Bicycle */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: -36,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    background: '#EAF4FC',
+                    border: '1px solid #BEE0EC',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#137DC5'
+                  }}>
+                    <Bike size={16} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 750, color: '#092040' }}>Worker Started Travel</span>
+                  <span style={{
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    color: 'white',
+                    background: '#0D6EFD',
+                    padding: '4px 8px',
+                    borderRadius: 12
+                  }}>{durationAndDistanceStr}</span>
+                </div>
+
+                {/* Step 2: Car */}
+                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: -36,
+                    top: 10,
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    background: '#EAF4FC',
+                    border: '1px solid #BEE0EC',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#137DC5'
+                  }}>
+                    <Car size={16} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 750, color: '#092040', marginTop: 4 }}>Worker Started Travel</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 600, color: '#94A3B8', marginTop: 2 }}>
+                    {order?.worker?.dispatch_time ? formatTimeOnly(order.worker.dispatch_time) : '--:--'}
+                  </span>
+                </div>
+
+                {/* Step 3: MapPin */}
+                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: -36,
+                    top: 10,
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94A3B8'
+                  }}>
+                    <MapPin size={16} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 750, color: '#94A3B8', marginTop: 4 }}>Estimated Arrival Time</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 600, color: '#94A3B8', marginTop: 2 }}>{durationAndDistanceStr}</span>
+                </div>
+
+                {/* Step 4: Clock */}
+                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <div style={{
+                    position: 'absolute',
+                    left: -36,
+                    top: 10,
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94A3B8'
+                  }}>
+                    <Clock size={16} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 750, color: '#94A3B8', marginTop: 4 }}>Service Start Time (Estimated)</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 600, color: '#94A3B8', marginTop: 2 }}>Today, {order.time}</span>
                 </div>
               </div>
             </div>
           )}
 
-
+          {/* Live Location Card */}
+          {isInProgress && order.worker && order.worker.latitude && (
+            <div style={{
+              background: 'white',
+              borderRadius: 16,
+              padding: 16,
+              margin: '12px 16px',
+              border: '1px solid #F1F5F9',
+              boxShadow: '0 4px 12px rgba(9, 32, 64, 0.04)'
+            }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 12, color: '#092040', margin: '0 0 16px 0' }}>
+                <Compass size={15} color="#137DC5" /> Live Location
+              </h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    background: '#EAF4FC',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#137DC5'
+                  }}>
+                    <MapPin size={15} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 600 }}>Worker Location</span>
+                    <span style={{ fontSize: 11, fontWeight: 750, color: '#092040', marginTop: 1 }}>
+                      {parseFloat(order.worker.latitude).toFixed(5)}, {parseFloat(order.worker.longitude).toFixed(5)}
+                    </span>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    background: '#E8F6EE',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#19A859'
+                  }}>
+                    <Home size={15} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 600 }}>Service Location</span>
+                    <span style={{ fontSize: 11, fontWeight: 750, color: '#092040', marginTop: 1 }}>{order.address}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: 12,
+                paddingTop: 12,
+                borderTop: '1px solid #F1F5F9'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Navigation size={14} color="#94A3B8" style={{ transform: 'rotate(45deg)' }} />
+                  <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 600 }}>Distance to Service</span>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 750, color: '#137DC5' }}>{durationAndDistanceStr}</span>
+              </div>
+            </div>
+          )}
 
           {/* Service Details Section */}
           <div style={{
-            padding: '16px 20px 0 20px',
+            background: 'white',
+            borderRadius: 16,
+            padding: 16,
+            margin: '12px 16px',
+            border: '1px solid #F1F5F9',
             textAlign: 'left'
           }}>
-            <h3 style={{ fontWeight: 800, fontSize: 11, color: '#092040', marginBottom: 12 }}>
+            <h3 style={{ fontWeight: 800, fontSize: 12, color: '#092040', marginBottom: 12 }}>
               Service Details
             </h3>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 9.5, fontWeight: 500, color: '#94A3B8' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Base Price (1 Hour)</span>
-                <span style={{ color: '#94A3B8', fontWeight: 600 }}>{formatEuro(basePriceNum)}</span>
+                <span>Base Price ({order?.booking_hours || 1} Hour{(order?.booking_hours || 1) > 1 ? 's' : ''})</span>
+                <span style={{ color: '#092040', fontWeight: 750 }}>{formatEuro(basePriceNum)}</span>
               </div>
 
-              {activeExtraHours > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ flex: 1 }}>Extra Work Hours</span>
-                  <span style={{ flex: 1, textAlign: 'center', color: '#94A3B8' }}>{activeExtraHours} Hour(s)</span>
-                  <span style={{ flex: 1, textAlign: 'right', color: '#94A3B8', fontWeight: 600 }}>{formatEuro(extraHoursAmount)}</span>
-                </div>
-              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ flex: 1 }}>Extra Work Hours</span>
+                <span style={{ flex: 1, textAlign: 'center', color: '#94A3B8' }}>{activeExtraHours} Hours</span>
+                <span style={{ flex: 1, textAlign: 'right', color: '#092040', fontWeight: 750 }}>{formatEuro(extraHoursAmount)}</span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Materials Fee</span>
+                <span style={{ color: '#092040', fontWeight: 750 }}>{order?.pricing?.materialsFee || '€0.00'}</span>
+              </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Extra Charges</span>
-                <span style={{ color: '#94A3B8', fontWeight: 600 }}>{order?.pricing?.extraCharges || '€0.00'}</span>
+                <span style={{ color: '#092040', fontWeight: 750 }}>{order?.pricing?.extraChargesActual || '€0.00'}</span>
               </div>
 
-              <div style={{ borderTop: '1px solid #F1F5F9', margin: '4px 0' }} />
+              <div style={{ borderTop: '1px dashed #E2E8F0', margin: '4px 0' }} />
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#092040', fontWeight: 800, fontSize: 11 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#092040', fontWeight: 800, fontSize: 13 }}>
                 <span>Total Amount</span>
                 <span>{formatEuro(totalAmountNum)}</span>
               </div>
             </div>
           </div>
 
-          {/* Info Alert Box */}
+          {/* Add Hours Banner */}
           {isInProgress && (
             <div style={{
               background: '#F0F7FF',
-              borderRadius: 6,
-              padding: '10px 12px',
-              margin: '12px 16px 0 16px',
+              borderRadius: 12,
+              padding: 12,
+              margin: '12px 16px',
               display: 'flex',
-              gap: 8,
-              alignItems: 'flex-start',
-              textAlign: 'left'
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12
             }}>
-              <Info size={14} color="#0D6EFD" style={{ flexShrink: 0, marginTop: 1 }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 8.5, fontWeight: 500, color: '#0D6EFD', lineHeight: 1.3 }}>
-                  Extra workhours will be charged as per hourly rate.
-                </span>
-                <span style={{ fontSize: 8.5, fontWeight: 500, color: '#0D6EFD' }}>
-                  Hourly Rate: {formatEuro(ratePerHour)}/Hour
-                </span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flex: 1 }}>
+                <Info size={16} color="#0D6EFD" style={{ flexShrink: 0, marginTop: 2 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 9.5, fontWeight: 700, color: '#0D6EFD', lineHeight: 1.3 }}>
+                    Extra workhours will be charged as per hourly rate.
+                  </span>
+                  <span style={{ fontSize: 9.5, fontWeight: 700, color: '#0D6EFD' }}>
+                    Hourly Rate: {formatEuro(ratePerHour)}/Hour
+                  </span>
+                </div>
               </div>
               
               {!(order?.pendingExtraHours > 0) && addHoursStatus !== 'pending' && !(pendingNum > 0 && activeExtraHours > 0) && (
@@ -1712,13 +2319,12 @@ export default function OrderDetailsPage() {
                     background: '#0D6EFD',
                     color: 'white',
                     border: 'none',
-                    borderRadius: 4,
-                    padding: '6px 10px',
-                    fontWeight: 600,
-                    fontSize: 8.5,
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    fontWeight: 700,
+                    fontSize: 10,
                     cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                    marginLeft: 'auto'
+                    whiteSpace: 'nowrap'
                   }}
                 >
                   Add Hours
@@ -1731,139 +2337,95 @@ export default function OrderDetailsPage() {
           {(isCompleted || isInProgress || isPending) && activeExtraHours > 0 && (
             <div style={{
               background: 'white',
-              borderRadius: 8,
-              padding: '12px',
-              margin: '16px 16px 0 16px',
+              borderRadius: 16,
+              padding: 16,
+              margin: '12px 16px',
               border: '1px solid #F1F5F9',
-              textAlign: 'left'
+              boxShadow: '0 4px 12px rgba(9, 32, 64, 0.04)'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <div style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: '50%',
-                  background: '#EFF6FF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#0D6EFD',
-                  flexShrink: 0
-                }}>
-                  <Clock size={12} color="#0D6EFD" />
-                </div>
-                <h3 style={{ fontWeight: 800, fontSize: 10, color: '#092040', margin: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <Clock size={16} color="#137DC5" />
+                <h3 style={{ fontWeight: 800, fontSize: 11, color: '#092040', margin: 0 }}>
                   Extra Work Hours Detail
                 </h3>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 10, borderTop: '1px solid #F1F5F9' }}>
-                {/* Column 1 */}
-                <div style={{ flex: 1.2, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Extra Hours</span>
-                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 600 }}>{activeExtraHours} Hour(s)</span>
+              <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 600 }}>Extra Hours</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#092040' }}>{activeExtraHours} Hours</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>HourlyRate</span>
-                    <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 600 }}>{formatEuro(ratePerHour)}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 600 }}>Hourly Rate</span>
+                    <span style={{ fontSize: 11, fontWeight: 750, color: '#092040' }}>{formatEuro(ratePerHour)}</span>
                   </div>
                 </div>
 
-                {/* Divider Line */}
-                <div style={{ width: 1, height: 28, background: '#F1F5F9' }} />
+                <div style={{ width: 1, height: 32, background: '#E2E8F0', margin: '0 16px' }} />
 
-                {/* Column 2 */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Extra Hours Amount</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: '#94A3B8', marginTop: 2 }}>{formatEuro(extraHoursAmount)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Cleaning Materials Required Card */}
-          {(isCompleted || isInProgress || isPending) && (
-            <div style={{
-              background: 'white',
-              borderRadius: 8,
-              padding: '12px',
-              margin: '16px 16px 0 16px',
-              display: 'flex',
-              gap: 10,
-              border: '1px solid #F1F5F9',
-              textAlign: 'left'
-            }}>
-              <div style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                background: '#EFF6FF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#0D6EFD',
-                flexShrink: 0
-              }}>
-                <svg style={{ width: 14, height: 14 }} viewBox="0 0 24 24" fill="none" stroke="#0D6EFD" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z" />
-                  <path d="M8 9V6a4 4 0 0 1 8 0v3" />
-                  <path d="M6 5h2M7 5v4" strokeWidth="2.2" />
-                  <path d="M16 4h2M17 4v5" strokeWidth="2.2" />
-                  <line x1="8" y1="13" x2="8" y2="17" />
-                  <line x1="12" y1="13" x2="12" y2="17" />
-                  <line x1="16" y1="13" x2="16" y2="17" />
-                </svg>
-              </div>
-
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <h3 style={{ fontWeight: 800, fontSize: 10, color: '#092040', marginBottom: 2 }}>
-                  Cleaning Materials Required
-                </h3>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: 4 }}>
-                  <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>CleaningMaterials Required</span>
-                  <span style={{ fontSize: 8.5, color: (order.materials?.required === 'Yes' || order.requirements?.cleaning_materials) ? '#22C55E' : '#94A3B8', fontWeight: 600 }}>
-                    {(order.materials?.required === 'Yes' || order.requirements?.cleaning_materials) ? 'Yes' : 'No'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 2 }}>
-                  <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 500 }}>Vacuum Cleaner Required</span>
-                  <span style={{ fontSize: 8.5, color: (order.materials?.vacuum === 'Yes' || order.requirements?.vacuum_cleaner) ? '#22C55E' : '#94A3B8', fontWeight: 600 }}>
-                    {(order.materials?.vacuum === 'Yes' || order.requirements?.vacuum_cleaner) ? 'Yes' : 'No'}
-                  </span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+                  <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 600 }}>Extra Hours Amount</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#092040', marginTop: 2 }}>{formatEuro(extraHoursAmount)}</span>
                 </div>
               </div>
             </div>
           )}
 
           {/* Payment Summary Box */}
-          {(isPending || addHoursStatus === 'approved') && (
+          {!isPending && addHoursStatus === 'approved' && (
             <div style={{
               background: 'white',
               borderRadius: 16,
-              padding: '16px',
-              margin: '16px 16px 0 16px',
-              boxShadow: '0 1px 8px rgba(9,32,64,0.03)',
-              border: '1px solid #F1F5F9'
+              padding: 16,
+              margin: '12px 16px',
+              border: '1px solid #F1F5F9',
+              boxShadow: '0 4px 12px rgba(9, 32, 64, 0.04)'
             }}>
-              <h3 style={{ fontWeight: 800, fontSize: 13, color: '#092040', marginBottom: 12 }}>
+              <h3 style={{ fontWeight: 800, fontSize: 12, color: '#092040', margin: '0 0 12px 0' }}>
                 Payment Summary
               </h3>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase' }}>Total Amount</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#475569', marginTop: 2 }}>{formatEuro(totalAmountNum)}</span>
+              <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase' }}>Total Amount</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginTop: 2 }}>{formatEuro(totalAmountNum)}</span>
                 </div>
-                <div style={{ width: 1, height: 28, background: '#F1F5F9' }} />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase' }}>Already Paid</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#092040', marginTop: 2 }}>{formatEuro(paidNum)}</span>
+                <div style={{ width: 1, height: 28, background: '#E2E8F0', margin: '0 12px' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase' }}>Already Paid</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#092040', marginTop: 2 }}>{formatEuro(paidNum)}</span>
                 </div>
-                <div style={{ width: 1, height: 28, background: '#F1F5F9' }} />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase' }}>Pending Amount</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#137DC5', marginTop: 2 }}>{formatEuro(pendingNum)}</span>
+                <div style={{ width: 1, height: 28, background: '#E2E8F0', margin: '0 12px' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 8.5, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase' }}>Pending Amount</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#137DC5', marginTop: 2 }}>{formatEuro(pendingNum)}</span>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Cleaning Materials Required Card (Mobile) */}
+          {order?.materials && order.materials.length > 0 && (
+            <div style={{
+              background: 'white',
+              borderRadius: 16,
+              padding: 16,
+              margin: '12px 16px',
+              border: '1px solid #F1F5F9',
+              boxShadow: '0 4px 12px rgba(9, 32, 64, 0.04)'
+            }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 12, color: '#092040', margin: '0 0 16px 0' }}>
+                <ShoppingBag size={16} color="#137DC5" /> Cleaning Materials Required
+              </h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {order.materials.map((mat) => (
+                  <div key={mat.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed #F1F5F9', paddingBottom: 10, marginBottom: 0 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{mat.name}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 750, color: '#137DC5' }}>Yes</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1880,7 +2442,7 @@ export default function OrderDetailsPage() {
           padding: '16px',
           borderTop: '1px solid #F1F5F9',
           boxShadow: '0 -4px 10px rgba(0,0,0,0.03)',
-          zIndex: 40
+          zIndex: 100
         }}>
           {currentStatus === 'Completed' && (
             <div style={{ display: 'flex', gap: 12 }}>
@@ -1919,17 +2481,17 @@ export default function OrderDetailsPage() {
             </div>
           )}
 
-          {(currentStatus === 'Ininprogress' || currentStatus === 'Inprogress') && (
+          {isInProgress && (
             <>
               {(order?.pendingExtraHours > 0 || addHoursStatus === 'pending') ? (
                 <div style={{
                   width: '100%',
-                  padding: '12px',
+                  padding: '14px',
                   background: '#A7F3D0',
                   border: '1px solid #10B981',
-                  borderRadius: 6,
+                  borderRadius: 12,
                   color: '#065F46',
-                  fontWeight: 600,
+                  fontWeight: 750,
                   fontSize: 12,
                   textAlign: 'center',
                   lineHeight: 1.5
@@ -1942,12 +2504,12 @@ export default function OrderDetailsPage() {
                   onClick={handlePay}
                   style={{
                     width: '100%',
-                    padding: '12px',
+                    padding: '14px',
                     background: '#0D6EFD',
-                    borderRadius: 6,
+                    borderRadius: 12,
                     color: 'white',
-                    fontWeight: 600,
-                    fontSize: 12,
+                    fontWeight: 750,
+                    fontSize: 13,
                     border: 'none',
                     cursor: 'pointer',
                     display: 'flex',
@@ -1962,12 +2524,12 @@ export default function OrderDetailsPage() {
                   onClick={() => alert('Order verified!')}
                   style={{
                     width: '100%',
-                    padding: '12px',
+                    padding: '14px',
                     background: '#0D6EFD',
-                    borderRadius: 6,
+                    borderRadius: 12,
                     color: 'white',
-                    fontWeight: 600,
-                    fontSize: 12,
+                    fontWeight: 750,
+                    fontSize: 13,
                     border: 'none',
                     cursor: 'pointer',
                     display: 'flex',
@@ -1981,45 +2543,48 @@ export default function OrderDetailsPage() {
             </>
           )}
 
-          {isPending && (
-            <button 
-              onClick={handleConfirmBooking}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: '#0D6EFD',
-                borderRadius: 6,
-                color: 'white',
-                fontWeight: 600,
-                fontSize: 12,
-                border: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              Confirm Booking
-            </button>
-          )}
+          {/* Sticky Bottom Spacing placeholder */}
+          <div style={{ height: 10 }}></div>
 
-          {!isPending && !isInProgress && !isCompleted && (
-            <button 
-              onClick={handleConfirmBooking}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: '#0D6EFD',
-                borderRadius: 6,
-                color: 'white',
-                fontWeight: 600,
-                fontSize: 12,
-                border: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              Confirm Booking
-            </button>
+          {isCancelled && (
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button 
+                onClick={() => router.push('/dashboard/orders')}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  border: '1.5px solid #E2E8F0',
+                  borderRadius: 10,
+                  color: '#092040',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  background: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                View Details
+              </button>
+              <button 
+                onClick={handleRescheduleClick}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  background: '#0D6EFD',
+                  borderRadius: 10,
+                  color: 'white',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(13,110,253,0.2)'
+                }}
+              >
+                Reschedule
+              </button>
+            </div>
           )}
         </div>
-    </div>
+      </div>
 
       {/* Add Extra Hours Modal Component */}
       {isAddHoursModalOpen && (

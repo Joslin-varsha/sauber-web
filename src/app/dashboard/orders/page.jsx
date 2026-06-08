@@ -521,21 +521,57 @@ export default function DashboardOrdersPage() {
                 {/* Bottom row: status badge + View Details button */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <MobileStatusBadge status={order.status} />
-                  <button
-                    onClick={() => handleViewDetails(order.id)}
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: 4,
-                      border: '1px solid #93C5FD',
-                      background: 'white',
-                      color: '#0D6EFD',
-                      fontSize: 9.5,
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    View Details
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {order.status?.toLowerCase() === 'cancelled' && (
+                      <button
+                        onClick={() => router.push('/add-post')}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: 4,
+                          border: '1px solid #0D6EFD',
+                          background: '#0D6EFD',
+                          color: 'white',
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Reschedule
+                      </button>
+                    )}
+                    {order.status?.toLowerCase() === 'completed' && (
+                      <button
+                        onClick={() => router.push('/add-post')}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: 4,
+                          border: '1px solid #0D6EFD',
+                          background: '#0D6EFD',
+                          color: 'white',
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Book Again
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleViewDetails(order.id)}
+                      style={{
+                        padding: '4px 12px',
+                        borderRadius: 4,
+                        border: '1px solid #93C5FD',
+                        background: 'white',
+                        color: '#0D6EFD',
+                        fontSize: 9.5,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      View Details
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -801,6 +837,24 @@ export default function DashboardOrdersPage() {
                       {/* Column 6: Status & Button */}
                       <div className="md:w-[13%] flex flex-col items-start md:items-end gap-2.5 flex-shrink-0">
                         {getStatusBadge(order.status)}
+
+                        {order.status?.toLowerCase() === 'cancelled' && (
+                          <button
+                            onClick={() => router.push('/add-post')}
+                            className="px-4.5 py-2 bg-[#137DC5] hover:bg-[#137DC5]/90 text-white rounded-xl font-sans font-extrabold text-[12px] tracking-wide transition-all cursor-pointer shadow-sm hover:shadow-md w-full md:w-auto text-center"
+                          >
+                            Reschedule
+                          </button>
+                        )}
+
+                        {order.status?.toLowerCase() === 'completed' && (
+                          <button
+                            onClick={() => router.push('/add-post')}
+                            className="px-4.5 py-2 bg-[#137DC5] hover:bg-[#137DC5]/90 text-white rounded-xl font-sans font-extrabold text-[12px] tracking-wide transition-all cursor-pointer shadow-sm hover:shadow-md w-full md:w-auto text-center"
+                          >
+                            Book Again
+                          </button>
+                        )}
 
                         <button
                           onClick={() => handleViewDetails(order.id)}

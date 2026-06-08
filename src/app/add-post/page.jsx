@@ -100,7 +100,14 @@ function PostJobContent() {
   const [activeField, setActiveField] = useState('sqm'); // default SQM is focused/selected in mockup
   const [rooms, setRooms] = useState(searchParams.get('rooms') && searchParams.get('rooms') !== '0' ? parseInt(searchParams.get('rooms'), 10) : '');
   const [sqm, setSqm] = useState(searchParams.get('sqm') && searchParams.get('sqm') !== '0' ? parseInt(searchParams.get('sqm'), 10) : '');
-  const [expectedTime, setExpectedTime] = useState(searchParams.get('expected_time') && searchParams.get('expected_time') !== '0' ? parseInt(searchParams.get('expected_time'), 10) : '');
+  const [expectedTime, setExpectedTime] = useState(() => {
+    const et = searchParams.get('expected_time');
+    if (et && et !== '0') return parseInt(et, 10);
+    if (searchParams.get('service')) return 1;
+    return '';
+  });
+
+
 
   const [dynamicMaterials, setDynamicMaterials] = useState([]);
   const [selectedMaterials, setSelectedMaterials] = useState(() => {
@@ -249,13 +256,54 @@ function PostJobContent() {
   const [notes, setNotes] = useState(searchParams.get('notes') || '');
   const [referredBy, setReferredBy] = useState('');
   const [isOpenReferredBy, setIsOpenReferredBy] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
     if (typeof window !== 'undefined') {
-      setIsLoggedIn(sessionStorage.getItem('is_logged_in') === 'true');
+      return sessionStorage.getItem('is_logged_in') === 'true';
     }
-  }, []);
+    return false;
+  });
+
+  // Sync state values with query parameters on mount or parameter changes (handles Next.js router hydration lag)
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    const roomsParam = searchParams.get('rooms');
+    if (roomsParam && roomsParam !== '0') {
+      setRooms(parseInt(roomsParam, 10));
+    }
+    
+    const sqmParam = searchParams.get('sqm');
+    if (sqmParam && sqmParam !== '0') {
+      setSqm(parseInt(sqmParam, 10));
+    }
+    
+    const etParam = searchParams.get('expected_time');
+    if (etParam && etParam !== '0') {
+      setExpectedTime(parseInt(etParam, 10));
+    } else if (initialService) {
+      setExpectedTime(1);
+    }
+
+    const freqParam = searchParams.get('frequency');
+    if (freqParam) {
+      setFrequency(freqParam);
+    }
+
+    const dateParam = searchParams.get('date');
+    if (dateParam) {
+      setSelectedDate(dateParam);
+    }
+
+    const timeParam = searchParams.get('booking_time');
+    if (timeParam) {
+      setSelectedTime(timeParam);
+    }
+
+    const notesParam = searchParams.get('notes');
+    if (notesParam) {
+      setNotes(notesParam);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [searchParams, initialService]);
 
   // Dropdown UI state toggles
   const [isOpenRooms, setIsOpenRooms] = useState(false);
@@ -317,10 +365,11 @@ function PostJobContent() {
       }
     };
     fetchServices();
-  }, []);
+  }, [initialService]);
 
   // On mount: read sessionStorage and hydrate location state (client-only, after SSR)
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     setMounted(true);
     const syncLocation = () => {
       try {
@@ -385,7 +434,7 @@ function PostJobContent() {
       }
     }
     loadMaterials();
-  }, [selectedService]);
+  }, [selectedService, searchParams]);
 
   const handleToggleMaterial = (matId) => {
     setSelectedMaterials(prev => 
@@ -682,6 +731,7 @@ function PostJobContent() {
                                 setSelectedService(svc);
                                 setIsOpenService(false);
                                 setValidationError('');
+                                if (!expectedTime) setExpectedTime(1);
                               }}
                               className={`w-full text-left px-4 py-2.5 hover:bg-slate-50 font-sans text-[12.5px] transition-colors cursor-pointer flex items-center justify-between ${
                                 selectedService?.id === svc.id
@@ -742,7 +792,7 @@ function PostJobContent() {
                             className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-right pr-1"
                             placeholder="0"
                           />
-                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none">Rooms</span>
+                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none ml-1.5">Rooms</span>
                         </div>
                       </div>
                     </div>
@@ -767,7 +817,7 @@ function PostJobContent() {
                             className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-right pr-1.5"
                             placeholder="0"
                           />
-                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none">sqm</span>
+                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none ml-1.5">sqm</span>
                         </div>
                       </div>
                     </div>
@@ -792,7 +842,7 @@ function PostJobContent() {
                             className="w-full bg-transparent border-none outline-none font-sans font-bold text-[12.5px] text-slate-700 text-right pr-1"
                             placeholder="0"
                           />
-                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none">Hrs</span>
+                          <span className="font-sans font-bold text-[12.5px] text-slate-500 pointer-events-none ml-1.5">Hrs</span>
                         </div>
                       </div>
                     </div>
@@ -1453,6 +1503,7 @@ function PostJobContent() {
                           setSelectedService(svc);
                           setIsOpenService(false);
                           setValidationError('');
+                          if (!expectedTime) setExpectedTime(1);
                         }}
                         className={`w-full text-left px-4 py-2.5 hover:bg-slate-50 font-sans text-xs transition-colors cursor-pointer flex items-center justify-between ${
                           selectedService?.id === svc.id

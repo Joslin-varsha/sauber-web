@@ -296,7 +296,7 @@ export default function AboutUsPage() {
           </section>
 
           {/* ================= SECTION 5: FREQUENTLY ASKED QUESTIONS ================= */}
-          <section className="flex flex-col items-center mb-16 md:mb-24">
+          <section id="faq" className="flex flex-col items-center mb-16 md:mb-24 scroll-mt-20">
             <div className="text-center flex flex-col gap-2 mb-10 max-w-lg">
               <span className="text-[11px] font-bold text-primary tracking-widest uppercase">
                 FAQ

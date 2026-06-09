@@ -390,7 +390,7 @@ const getHaversineDistance = (lat1, lon1, lat2, lon2) => {
   return R * c; // Distance in km
 };
 
-function mapBackendOrderToUI(data) {
+function mapBackendOrderToUI(data, workersList = []) {
   const getInitials = (name) => {
     if (!name) return '';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -400,37 +400,52 @@ function mapBackendOrderToUI(data) {
   
   // Map worker if present
   let workerVal = null;
-  if (data.worker) {
+  const wData = data.worker || (data.worker_name ? data : null);
+
+  if (wData) {
+    const wName = wData.name || wData.worker_name || '';
+    
+    // Find matching worker in workersList by name (case-insensitive)
+    const matchedWorker = Array.isArray(workersList) ? workersList.find(
+      w => w && w.name && wName && w.name.toLowerCase().trim() === wName.toLowerCase().trim()
+    ) : null;
+
+    let role = wData.role || wData.skill || wData.worker_skill || '';
+    let rating = parseFloat(wData.rating || wData.worker_rating) || 0.0;
+    let reviews = parseInt(wData.reviews || wData.reviews_count || wData.worker_reviews || wData.worker_reviews_count, 10) || 0;
+    let avatar = wData.profile_photo || wData.avatar || wData.worker_profile_photo || wData.worker_photo || null;
+
+    if (matchedWorker) {
+      if (matchedWorker.skill) {
+        role = matchedWorker.skill.toLowerCase().includes('specialist') || matchedWorker.skill.toLowerCase().includes('expert')
+          ? matchedWorker.skill.split(',')[0].trim()
+          : `${matchedWorker.skill.split(',')[0].trim()} Specialist`;
+      }
+      rating = parseFloat(matchedWorker.rating) || 0.0;
+      reviews = parseInt(matchedWorker.reviews_count, 10) || 0;
+      if (matchedWorker.profile_photo) {
+        avatar = matchedWorker.profile_photo;
+      }
+    } else if (role) {
+      role = role.toLowerCase().includes('specialist') || role.toLowerCase().includes('expert')
+        ? role.split(',')[0].trim()
+        : `${role.split(',')[0].trim()} Specialist`;
+    }
+
     workerVal = {
-      name: data.worker.name || '',
-      role: data.worker.role || '',
-      rating: data.worker.rating || 0.0,
-      reviews: data.worker.reviews || 0,
-      arrivalTime: data.worker.arrivalTime || data.worker.arrival_time || data.arrival_time || '',
-      initials: getInitials(data.worker.name || ''),
+      name: wName || 'Assigned Worker',
+      role: role,
+      rating: rating,
+      reviews: reviews,
+      arrivalTime: wData.arrivalTime || wData.arrival_time || data.arrival_time || '',
+      initials: getInitials(wName || 'Worker'),
       gradient: 'from-blue-400 to-teal-500',
-      profile_photo: data.worker.profile_photo || data.worker.avatar || data.worker.worker_photo || null,
-      latitude: data.worker.latitude || data.worker.worker_latitude || data.worker_latitude || null,
-      longitude: data.worker.longitude || data.worker.worker_longitude || data.worker_longitude || null,
-      travel_time_taken: data.worker.travel_time_taken || data.worker.total_travel_time || data.worker_travel_time_taken || null,
-      dispatch_time: data.worker.dispatch_time || data.worker_dispatch_time || null,
-      arrival_time_raw: data.worker.arrival_time || data.worker_arrival_time || null
-    };
-  } else if (data.worker_name || data.worker_latitude || data.worker_longitude) {
-    workerVal = {
-      name: data.worker_name || 'Assigned Worker',
-      role: data.worker_skill || '',
-      rating: data.worker_rating || 0.0,
-      reviews: data.worker_reviews || 0,
-      arrivalTime: data.arrival_time || '',
-      initials: getInitials(data.worker_name || 'Worker'),
-      gradient: 'from-blue-400 to-teal-500',
-      profile_photo: data.worker_profile_photo || data.profile_photo || data.worker_photo || null,
-      latitude: data.worker_latitude || (data.worker && data.worker.latitude) || (data.worker && data.worker.worker_latitude) || null,
-      longitude: data.worker_longitude || (data.worker && data.worker.longitude) || (data.worker && data.worker.worker_longitude) || null,
-      travel_time_taken: data.worker_travel_time_taken || (data.worker && data.worker.travel_time_taken) || null,
-      dispatch_time: data.worker_dispatch_time || (data.worker && data.worker.dispatch_time) || null,
-      arrival_time_raw: data.worker_arrival_time || (data.worker && data.worker.arrival_time) || null
+      profile_photo: avatar,
+      latitude: wData.latitude || wData.worker_latitude || data.worker_latitude || null,
+      longitude: wData.longitude || wData.worker_longitude || data.worker_longitude || null,
+      travel_time_taken: wData.travel_time_taken || wData.total_travel_time || wData.worker_travel_time_taken || data.worker_travel_time_taken || null,
+      dispatch_time: wData.dispatch_time || wData.worker_dispatch_time || data.worker_dispatch_time || null,
+      arrival_time_raw: wData.arrival_time || wData.arrival_time_raw || wData.worker_arrival_time || data.worker_arrival_time || null
     };
   }
 
@@ -596,9 +611,20 @@ export default function OrderDetailsPage() {
     try {
       setIsLoading(true);
       setError(null);
+
+      let workersList = [];
+      try {
+        const workersRes = await authApi.getWorkers({});
+        if (workersRes && workersRes.status && Array.isArray(workersRes.data)) {
+          workersList = workersRes.data;
+        }
+      } catch (workerErr) {
+        console.error('Error fetching workers list for details enrichment:', workerErr);
+      }
+
       const res = await authApi.getOrderDetails(rawId);
       if (res.status && res.data) {
-        const mapped = mapBackendOrderToUI(res.data);
+        const mapped = mapBackendOrderToUI(res.data, workersList);
         setOrder(mapped);
       } else {
         throw new Error(res.message || 'Failed to fetch order details');
@@ -744,8 +770,12 @@ export default function OrderDetailsPage() {
     return {
       id: w.id,
       name: w.name || 'Anonymous Worker',
-      role: w.skill ? `${w.skill} Specialist` : 'Cleaning Specialist',
-      rating: parseFloat(w.rating) || 4.5,
+      role: w.skill 
+        ? (w.skill.toLowerCase().includes('specialist') || w.skill.toLowerCase().includes('expert')
+            ? w.skill.split(',')[0].trim() 
+            : `${w.skill.split(',')[0].trim()} Specialist`)
+        : 'Service Specialist',
+      rating: parseFloat(w.rating) || 0.0,
       reviews: parseInt(w.reviews_count, 10) || 0,
       hourly_wage: parseFloat(w.hourly_wage) || 20.00,
       is_top_rated: w.is_top_rated,
@@ -787,11 +817,15 @@ export default function OrderDetailsPage() {
         const initials = newWorker.worker_name ? newWorker.worker_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'AW';
         
         const updatedWorker = {
-          name: newWorker.worker_name,
-          role: newWorker.skill ? `${newWorker.skill} Specialist` : 'Cleaning Expert',
-          rating: parseFloat(newWorker.rating) || 4.9,
-          reviews: 120, // default placeholder
-          arrivalTime: '09:55',
+          name: newWorker.worker_name || newWorker.name || '',
+          role: newWorker.skill 
+            ? (newWorker.skill.toLowerCase().includes('specialist') || newWorker.skill.toLowerCase().includes('expert')
+                ? newWorker.skill.split(',')[0].trim() 
+                : `${newWorker.skill.split(',')[0].trim()} Specialist`)
+            : 'Service Specialist',
+          rating: parseFloat(newWorker.rating) || 0.0,
+          reviews: parseInt(newWorker.reviews_count || newWorker.reviews, 10) || 0,
+          arrivalTime: newWorker.arrivalTime || newWorker.arrival_time || '09:55',
           initials,
           gradient: 'from-blue-450 to-teal-550'
         };
@@ -1184,17 +1218,17 @@ export default function OrderDetailsPage() {
                     <div className="flex flex-col">
                       <span className="font-sans text-[10px] text-slate-400 font-bold uppercase tracking-wider">Worker</span>
                       <span className="font-sans font-extrabold text-[#092040] text-[15.5px] mt-0.5">{order.worker.name}</span>
-                      
-                      {/* rating block */}
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Star className="w-3.5 h-3.5 fill-[#FFB800] text-[#FFB800]" />
-                        <span className="font-sans font-extrabold text-[#092040] text-[11.5px] ml-0.5">
-                          {order.worker.rating}
-                        </span>
-                        <span className="font-sans font-semibold text-slate-400 text-[10px] ml-0.5">
-                          ({order.worker.reviews} reviews)
-                        </span>
-                      </div>
+                      {order.worker.name && order.worker.name !== 'Assigned Worker' && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Star className="w-3.5 h-3.5 fill-[#FFB800] text-[#FFB800]" />
+                          <span className="font-sans font-extrabold text-[#092040] text-[11.5px] ml-0.5">
+                            {order.worker.rating.toFixed(1)}
+                          </span>
+                          <span className="font-sans font-semibold text-slate-400 text-[10px] ml-0.5">
+                            ({order.worker.reviews} reviews)
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1889,13 +1923,15 @@ export default function OrderDetailsPage() {
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontSize: 9, color: '#94A3B8', fontWeight: 600 }}>Worker</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#092040', marginTop: 1 }}>{order.worker.name}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 2 }}>
-                      <Star size={10} fill="#FFB800" color="#FFB800" />
-                      <span style={{ fontSize: 9.5, fontWeight: 600, color: '#94A3B8' }}>
-                        <span style={{ color: '#092040', fontWeight: 700 }}>{order.worker.rating}</span>
-                        {' '}({order.worker.reviews || 0} reviews)
-                      </span>
-                    </div>
+                    {order.worker.name && order.worker.name !== 'Assigned Worker' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: 2 }}>
+                        <Star size={10} fill="#FFB800" color="#FFB800" />
+                        <span style={{ fontSize: 9.5, fontWeight: 600, color: '#94A3B8' }}>
+                          <span style={{ color: '#092040', fontWeight: 700 }}>{order.worker.rating.toFixed(1)}</span>
+                          {' '}({order.worker.reviews || 0} reviews)
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2697,9 +2733,8 @@ export default function OrderDetailsPage() {
                               <span className="text-[9px] font-bold bg-[#E6F4EA] text-[#137333] px-1.5 py-0.5 rounded-full">Top</span>
                             )}
                           </div>
-                          <span className="font-sans text-[11px] text-slate-450 font-semibold block">{w.role}</span>
                           <div className="flex items-center gap-0.5 mt-1">
-                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                             <span className="font-sans font-bold text-[11px] text-slate-500">{w.rating.toFixed(1)}</span>
                             <span className="text-[10px] text-slate-350 ml-0.5 font-semibold">({w.reviews} reviews)</span>
                           </div>

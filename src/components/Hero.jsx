@@ -1,17 +1,76 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MapPin } from 'lucide-react';
 import BookingWidget from './BookingWidget';
 import { useLanguage } from '@/utils/LanguageContext';
+import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
+import { createPortal } from 'react-dom';
 
 export default function Hero({ locations }) {
   const { tr } = useLanguage();
   const [location, setLocation] = useState('Berlin, Germany');
 
+  const [mounted, setMounted] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [mapCenter, setMapCenter] = useState({ lat: 48.1351, lng: 11.5820 });
+  const [tempLocation, setTempLocation] = useState(null);
+  const [isLocating, setIsLocating] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''
+  });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    try {
+      const storedUser = sessionStorage.getItem('auth_user');
+      if (storedUser) {
+        const u = JSON.parse(storedUser);
+        if (u.location) {
+          setLocation(u.location);
+        }
+        if (u.latitude && u.longitude) {
+          const loc = { lat: parseFloat(u.latitude), lng: parseFloat(u.longitude) };
+          setMapCenter(loc);
+          setTempLocation(loc);
+        }
+      }
+    } catch (e) {}
+
+    const syncLocation = () => {
+      try {
+        const storedUser = sessionStorage.getItem('auth_user');
+        if (storedUser) {
+          const u = JSON.parse(storedUser);
+          if (u.location) setLocation(u.location);
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('locationChanged', syncLocation);
+    return () => window.removeEventListener('locationChanged', syncLocation);
+  }, []);
+
   const handleChangeLocation = () => {
-    const newLoc = prompt(tr('hero.promptLocation', 'Enter service city/area in Germany:'), location);
-    if (newLoc) setLocation(newLoc);
+    setShowMapModal(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLoc = { lat: position.coords.latitude, lng: position.coords.longitude };
+          setMapCenter(newLoc);
+          if (!tempLocation) {
+            setTempLocation(newLoc);
+          }
+        },
+        (err) => {
+          console.warn("Could not get live location for hero map click", err);
+        }
+      );
+    }
   };
 
   return (
@@ -104,6 +163,102 @@ export default function Hero({ locations }) {
           <BookingWidget locations={locations} />
         </div>
       </div>
+
+      {/* Map Picker Modal */}
+      {mounted && showMapModal && isLoaded && createPortal(
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col my-auto max-h-full">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-sans font-extrabold text-slate-800 text-[15px]">Select Location</h3>
+              <button onClick={() => setShowMapModal(false)} className="text-slate-400 hover:text-slate-650 cursor-pointer border-none bg-transparent">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            
+            <div className="h-[280px] sm:h-[350px] w-full relative bg-slate-50 flex-shrink-0">
+              <GoogleMap
+                mapContainerStyle={{ width: '100%', height: '100%' }}
+                center={mapCenter}
+                zoom={14}
+                onClick={(e) => {
+                  setTempLocation({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                }}
+              >
+                {tempLocation ? (
+                  <Marker position={tempLocation} />
+                ) : (
+                  <Marker position={mapCenter} />
+                )}
+              </GoogleMap>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white">
+              <button 
+                onClick={() => setShowMapModal(false)}
+                className="px-5 py-2.5 rounded-xl font-sans font-bold text-[13px] text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer border-none"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  const targetLocation = tempLocation || mapCenter;
+                  setShowMapModal(false);
+                  setIsLocating(true);
+                  try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetLocation.lat}&lon=${targetLocation.lng}`);
+                    const data = await res.json();
+                    if (data && data.address) {
+                      const mainAddr = data.address.city || data.address.town || data.address.village || data.address.suburb || data.address.road || data.display_name.split(',')[0];
+                      setLocation(mainAddr);
+                      try {
+                        const storedUser = sessionStorage.getItem('auth_user') || '{}';
+                        const u = JSON.parse(storedUser);
+                        u.location = mainAddr;
+                        u.latitude = targetLocation.lat;
+                        u.longitude = targetLocation.lng;
+                        sessionStorage.setItem('auth_user', JSON.stringify(u));
+                        
+                        // Dispatch custom event to notify BookingWidget and Header
+                        window.dispatchEvent(new Event('locationChanged'));
+                      } catch (e) {}
+                    } else {
+                      const latlngStr = `${targetLocation.lat.toFixed(2)}, ${targetLocation.lng.toFixed(2)}`;
+                      setLocation(latlngStr);
+                      try {
+                        const storedUser = sessionStorage.getItem('auth_user') || '{}';
+                        const u = JSON.parse(storedUser);
+                        u.location = latlngStr;
+                        u.latitude = targetLocation.lat;
+                        u.longitude = targetLocation.lng;
+                        sessionStorage.setItem('auth_user', JSON.stringify(u));
+                        window.dispatchEvent(new Event('locationChanged'));
+                      } catch (e) {}
+                    }
+                  } catch (err) {
+                    const latlngStr = `${targetLocation.lat.toFixed(2)}, ${targetLocation.lng.toFixed(2)}`;
+                    setLocation(latlngStr);
+                    try {
+                      const storedUser = sessionStorage.getItem('auth_user') || '{}';
+                      const u = JSON.parse(storedUser);
+                      u.location = latlngStr;
+                      u.latitude = targetLocation.lat;
+                      u.longitude = targetLocation.lng;
+                      sessionStorage.setItem('auth_user', JSON.stringify(u));
+                      window.dispatchEvent(new Event('locationChanged'));
+                    } catch (e) {}
+                  } finally {
+                    setIsLocating(false);
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl font-sans font-bold text-[13px] text-white bg-[#137DC5] hover:bg-[#0C5F97] cursor-pointer border-none shadow-md"
+              >
+                Confirm Location
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </section>
   );
 }

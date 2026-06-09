@@ -47,7 +47,7 @@ export default function WhyAndDownload() {
   ];
 
   return (
-    <section className="w-full pt-0 pb-8 bg-white text-left">
+    <section id="how-it-works" className="w-full pt-0 pb-8 bg-white text-left scroll-mt-20">
       <div className="mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-6 items-start">
           

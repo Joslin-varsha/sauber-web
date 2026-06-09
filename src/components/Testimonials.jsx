@@ -78,16 +78,10 @@ export default function Testimonials({ reviews: apiReviews }) {
       <div className="mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header Block */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center mb-6">
           <h2 className="font-sans font-bold text-lg sm:text-xl text-[#092040]">
             {tr('testimonials.title', 'What Our Customers Say')}
           </h2>
-          <a
-            href="#testimonials"
-            className="font-sans font-bold text-xs sm:text-[13px] text-[#137DC5] hover:underline transition-all cursor-pointer"
-          >
-            {tr('testimonials.viewAll', 'View all reviews →')}
-          </a>
         </div>
 
         {/* Desktop grid (3 cards) & Mobile carousel (1 card active) */}

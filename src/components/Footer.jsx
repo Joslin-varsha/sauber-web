@@ -1,22 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import Link from 'next/link';
 import { useLanguage } from '@/utils/LanguageContext';
 
 export default function Footer() {
-  const [email, setEmail] = useState('');
   const { tr } = useLanguage();
 
-  const handleSubscribe = (e) => {
-    e.preventDefault();
-    if (email) {
-      alert(`${tr('footer.subscribeAlert', 'Thank you for subscribing! We will send updates to:')} ${email}`);
-      setEmail('');
-    }
-  };
-
   return (
-    <footer className="w-full flex flex-col">
+    <footer id="contact" className="w-full flex flex-col scroll-mt-20">
       
       {/* 2. DARK NAVY MAIN FOOTER CONTENT */}
       <div className="w-full bg-[#092040] text-slate-300 py-12 text-left">
@@ -24,7 +15,7 @@ export default function Footer() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-10">
             
             {/* Column 1: Logo & Social Links */}
-            <div className="lg:col-span-4 flex flex-col gap-5">
+            <div className="lg:col-span-6 flex flex-col gap-5">
               <div className="flex items-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img 
@@ -70,56 +61,28 @@ export default function Footer() {
             </div>
 
             {/* Column 2: For Customers */}
-            <div className="lg:col-span-2 flex flex-col gap-3">
+            <div className="lg:col-span-3 flex flex-col gap-3">
               <h4 className="font-sans font-bold text-white text-[12.5px] uppercase tracking-wider">
                 {tr('footer.forCustomers', 'For Customers')}
               </h4>
               <div className="flex flex-col gap-2 font-sans text-[12.5px] font-semibold text-slate-400">
-                <a href="#how-it-works" className="hover:text-[#137DC5] transition-colors w-fit">{tr('nav.howItWorks', 'How It Works')}</a>
-                <a href="#faq" className="hover:text-[#137DC5] transition-colors w-fit">{tr('footer.faq', 'FAQ')}</a>
-                <a href="#contact" className="hover:text-[#137DC5] transition-colors w-fit">{tr('nav.contactUs', 'Contact Us')}</a>
+                <Link href="/#how-it-works" className="hover:text-[#137DC5] transition-colors w-fit">{tr('nav.howItWorks', 'How It Works')}</Link>
+                <Link href="/about-us#faq" className="hover:text-[#137DC5] transition-colors w-fit">{tr('footer.faq', 'FAQ')}</Link>
+                <Link href="/#contact" className="hover:text-[#137DC5] transition-colors w-fit">{tr('nav.contactUs', 'Contact Us')}</Link>
               </div>
             </div>
 
             {/* Column 3: Company */}
-            <div className="lg:col-span-2 flex flex-col gap-3">
+            <div className="lg:col-span-3 flex flex-col gap-3">
               <h4 className="font-sans font-bold text-white text-[12.5px] uppercase tracking-wider">
                 {tr('footer.company', 'Company')}
               </h4>
               <div className="flex flex-col gap-2 font-sans text-[12.5px] font-semibold text-slate-400">
-                <a href="/about-us" className="hover:text-[#137DC5] transition-colors w-fit">{tr('nav.aboutUs', 'About Us')}</a>
-                <a href="#terms" className="hover:text-[#137DC5] transition-colors w-fit">{tr('profile.termsConditions', 'Terms & Conditions')}</a>
-                <a href="#privacy" className="hover:text-[#137DC5] transition-colors w-fit">{tr('profile.privacyPolicy', 'Privacy Policy')}</a>
+                <Link href="/about-us" className="hover:text-[#137DC5] transition-colors w-fit">{tr('nav.aboutUs', 'About Us')}</Link>
+                <Link href="/#terms" className="hover:text-[#137DC5] transition-colors w-fit">{tr('profile.termsConditions', 'Terms & Conditions')}</Link>
+                <Link href="/#privacy" className="hover:text-[#137DC5] transition-colors w-fit">{tr('profile.privacyPolicy', 'Privacy Policy')}</Link>
               </div>
             </div>
-
-            {/* Column 4: Newsletter */}
-            <div className="lg:col-span-4 flex flex-col gap-3.5">
-              <h4 className="font-sans font-bold text-white text-[12.5px] uppercase tracking-wider">
-                {tr('footer.subscribeTitle', 'Subscribe to our newsletter')}
-              </h4>
-              <p className="font-sans text-[12px] text-slate-450 font-semibold leading-relaxed">
-                {tr('footer.subscribeDesc', 'Get updates on new services and offers.')}
-              </p>
-
-              <form onSubmit={handleSubscribe} className="flex gap-2 mt-1 w-full max-w-sm">
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={tr('footer.enterEmail', 'Enter your email')}
-                  className="w-full px-3.5 py-2 bg-white rounded-xl font-sans text-[12.5px] text-slate-800 placeholder-slate-400 outline-none transition-all"
-                />
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-[#137DC5] hover:bg-[#137DC5]/90 text-white font-sans font-bold text-[12.5px] rounded-xl shadow-md transition-all cursor-pointer"
-                >
-                  {tr('footer.subscribeBtn', 'Subscribe')}
-                </button>
-              </form>
-            </div>
-
           </div>
         </div>
       </div>

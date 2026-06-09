@@ -219,17 +219,45 @@ function getServiceIllustrationKey(serviceType) {
   return 'cleaning';
 }
 
-function mapBackendListOrderToUI(data) {
+function mapBackendListOrderToUI(data, workersList = []) {
   const timeFormatted = data.booking_time ? `, ${data.booking_time}` : '';
+  
+  // Find matching worker in workersList by name (case-insensitive)
+  const matchedWorker = Array.isArray(workersList) ? workersList.find(
+    w => w && w.name && data.worker_name && w.name.toLowerCase().trim() === data.worker_name.toLowerCase().trim()
+  ) : null;
+
+  let role = data.worker_skill || '';
+  let rating = parseFloat(data.worker_rating) || 0.0;
+  let reviews = parseInt(data.worker_reviews || data.worker_reviews_count, 10) || 0;
+  let avatar = data.worker_profile_photo || data.profile_photo || data.worker_photo || null;
+
+  if (matchedWorker) {
+    if (matchedWorker.skill) {
+      role = matchedWorker.skill.toLowerCase().includes('specialist') || matchedWorker.skill.toLowerCase().includes('expert')
+        ? matchedWorker.skill.split(',')[0].trim()
+        : `${matchedWorker.skill.split(',')[0].trim()} Specialist`;
+    }
+    rating = parseFloat(matchedWorker.rating) || 0.0;
+    reviews = parseInt(matchedWorker.reviews_count, 10) || 0;
+    if (matchedWorker.profile_photo) {
+      avatar = matchedWorker.profile_photo;
+    }
+  } else if (role) {
+    role = role.toLowerCase().includes('specialist') || role.toLowerCase().includes('expert')
+      ? role.split(',')[0].trim()
+      : `${role.split(',')[0].trim()} Specialist`;
+  }
+
   return {
     id: `#${data.booking_id}`,
     service: data.service_type,
     worker: {
       name: data.worker_name || 'Assigned Worker',
-      role: getWorkerRole(data.service_type),
-      rating: 4.8,
-      reviews: 120,
-      avatar: data.worker_profile_photo || data.profile_photo || data.worker_photo || null,
+      role: role,
+      rating: rating,
+      reviews: reviews,
+      avatar: avatar,
       initials: getInitials(data.worker_name || 'AW'),
       gradient: 'from-blue-400 to-teal-500'
     },
@@ -270,12 +298,24 @@ export default function DashboardOrdersPage() {
   useEffect(() => {
     if (!isAuthorized) return;
 
-    const fetchOrders = async () => {
+    const fetchOrdersAndWorkers = async () => {
       try {
         setIsLoading(true);
+        setError(null);
+        
+        let workersList = [];
+        try {
+          const workersRes = await authApi.getWorkers({});
+          if (workersRes && workersRes.status && Array.isArray(workersRes.data)) {
+            workersList = workersRes.data;
+          }
+        } catch (workerErr) {
+          console.error('Error fetching workers list for order enrichment:', workerErr);
+        }
+
         const res = await authApi.getOrders();
         if (res.status && Array.isArray(res.data)) {
-          const mapped = res.data.map(mapBackendListOrderToUI);
+          const mapped = res.data.map(item => mapBackendListOrderToUI(item, workersList));
           setOrders(mapped);
         } else {
           throw new Error(res.message || 'Failed to fetch orders');
@@ -289,7 +329,7 @@ export default function DashboardOrdersPage() {
       }
     };
 
-    fetchOrders();
+    fetchOrdersAndWorkers();
   }, [isAuthorized]);
 
   if (!isAuthorized) {
@@ -797,20 +837,20 @@ export default function DashboardOrdersPage() {
                           <h4 className="font-sans font-bold text-slate-800 text-[14.5px] leading-tight">
                             {order.worker.name}
                           </h4>
-                          <span className="font-sans text-[11px] text-slate-400 font-semibold leading-normal">
-                            {order.worker.role}
-                          </span>
-                          
-                          {/* Rating */}
-                          <div className="flex items-center mt-1">
-                            <Star className="w-3 h-3 fill-[#FFB800] text-[#FFB800]" />
-                            <span className="font-sans text-[11px] ml-1 font-bold text-[#092040]">
-                              {order.worker.rating}
-                            </span>
-                            <span className="font-sans text-[11px] text-slate-400 ml-0.5 font-semibold">
-                              ({order.worker.reviews})
-                            </span>
-                          </div>
+                          {order.worker.name && order.worker.name !== 'Assigned Worker' && (
+                            <>
+                              {/* Rating */}
+                              <div className="flex items-center mt-1">
+                                <Star className="w-3 h-3 fill-[#FFB800] text-[#FFB800]" />
+                                <span className="font-sans text-[11px] ml-1 font-bold text-[#092040]">
+                                  {order.worker.rating.toFixed(1)}
+                                </span>
+                                <span className="font-sans text-[11px] text-slate-400 ml-0.5 font-semibold">
+                                  ({order.worker.reviews} reviews)
+                                </span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
 

@@ -140,6 +140,9 @@ export default function Header() {
             <Link href="/#services" className="font-sans font-semibold text-slate-600 hover:text-primary transition-colors text-[13px]">
               {t('nav.services', 'Services')}
             </Link>
+            <Link href="/#how-it-works" className="font-sans font-semibold text-slate-600 hover:text-primary transition-colors text-[13px]">
+              {t('nav.howItWorks', 'How It Works')}
+            </Link>
             <div className="relative py-1 flex items-center">
               <Link 
                 href="/about-us" 
